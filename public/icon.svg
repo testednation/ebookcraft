@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#18181B"/>
+  <rect x="24" y="24" width="464" height="464" rx="88" stroke="#3F3F46" stroke-width="2"/>
+  <path d="M140 120C140 108.954 148.954 100 160 100H240C248.837 100 256 107.163 256 116V396C256 391.582 252.418 388 248 388H156C147.163 388 140 380.837 140 372V120Z" fill="#F59E0B" fill-opacity="0.9"/>
+  <path d="M372 120C372 108.954 363.046 100 352 100H272C263.163 100 256 107.163 256 116V396C256 391.582 259.582 388 264 388H356C364.837 388 372 380.837 372 372V120Z" fill="#D97706" fill-opacity="0.8"/>
+  <path d="M256 116V400" stroke="#78350F" stroke-width="4" stroke-linecap="round"/>
+  <!-- Elegant bookmark ribbon -->
+  <path d="M246 100H266V220L256 208L246 220V100Z" fill="#FBBF24"/>
+  <!-- Subtle book pages lines -->
+  <line x1="170" y1="160" x2="226" y2="160" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+  <line x1="170" y1="200" x2="226" y2="200" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+  <line x1="170" y1="240" x2="210" y2="240" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+  <line x1="286" y1="160" x2="342" y2="160" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+  <line x1="286" y1="200" x2="342" y2="200" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+  <line x1="286" y1="240" x2="326" y2="240" stroke="#78350F" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5"/>
+</svg>

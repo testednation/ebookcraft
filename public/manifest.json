@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "FolioCraft Ebook Creator & Publisher",
+  "short_name": "FolioCraft",
+  "description": "Offline-first ebook creator and book publisher matching Atticus and Vellum.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

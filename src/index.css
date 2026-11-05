@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-serif: 'EB Garamond', Georgia, serif;
+    --font-cormorant: 'Cormorant Garamond', Georgia, serif;
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-cinzel: 'Cinzel', serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+/* Custom Drop Cap Styling */
+.drop-cap-classic::first-letter {
+  float: left;
+  font-family: var(--font-cormorant);
+  font-size: 3.8em;
+  line-height: 0.8;
+  padding-top: 4px;
+  padding-right: 8px;
+  padding-bottom: 2px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.drop-cap-modern::first-letter {
+  float: left;
+  font-family: var(--font-sans);
+  font-size: 3.4em;
+  line-height: 0.8;
+  padding-top: 4px;
+  padding-right: 10px;
+  font-weight: 700;
+  color: #d97706;
+}
+
+.drop-cap-ornate::first-letter {
+  float: left;
+  font-family: var(--font-cinzel);
+  font-size: 4em;
+  line-height: 0.75;
+  padding-top: 6px;
+  padding-right: 10px;
+  font-weight: 700;
+  color: #b45309;
+}
+
+/* Print CSS Media Rules for direct high-res print export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  @page {
+    margin: 0.75in 0.65in 0.75in 0.85in; /* Inside gutter for binding */
+  }
+
+  @page :left {
+    margin-left: 0.65in;
+    margin-right: 0.85in;
+  }
+
+  @page :right {
+    margin-left: 0.85in;
+    margin-right: 0.65in;
+  }
+
+  .print-page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .print-chapter-start {
+    page-break-before: right;
+    break-before: right;
+  }
+}
