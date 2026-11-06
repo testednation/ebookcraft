@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Target, Sparkles, CheckCircle2, ChevronRight, Settings2, Flame, TrendingUp } from 'lucide-react';
+import { Target, Settings2, Flame, TrendingUp } from 'lucide-react';
 import { Book, Chapter } from '../types/book';
 
 interface GoalTrackerWidgetProps {
@@ -20,26 +20,22 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [viewMode, setViewMode] = useState<'daily' | 'chapter' | 'book'>('daily');
 
-  // Input states for editing goals
   const [dailyGoalInput, setDailyGoalInput] = useState(book.dailyWordGoal || 1000);
   const [bookTargetInput, setBookTargetInput] = useState(book.targetWordCount || 60000);
   const [chapterTargetInput, setChapterTargetInput] = useState(
     activeChapter?.targetWordCount || 2500
   );
 
-  // Synchronize when activeChapter or book changes
   React.useEffect(() => {
     setDailyGoalInput(book.dailyWordGoal || 1000);
     setBookTargetInput(book.targetWordCount || 60000);
     setChapterTargetInput(activeChapter?.targetWordCount || 2500);
   }, [book.dailyWordGoal, book.targetWordCount, activeChapter?.id, activeChapter?.targetWordCount]);
 
-  // Calculations
   const totalBookWords = chapters.reduce((acc, curr) => acc + (curr.wordCount || 0), 0);
   const bookTarget = book.targetWordCount || 60000;
   const bookPercent = Math.min(100, Math.round((totalBookWords / Math.max(1, bookTarget)) * 100));
 
-  // Daily calculations
   const todayStr = new Date().toISOString().slice(0, 10);
   const baselineWords =
     book.dailyBaselineDate === todayStr ? (book.dailyBaselineWords ?? totalBookWords) : totalBookWords;
@@ -47,18 +43,14 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
   const dailyGoal = book.dailyWordGoal || 1000;
   const dailyPercent = Math.min(100, Math.round((wordsToday / Math.max(1, dailyGoal)) * 100));
 
-  // Active Chapter calculations
   const chapterWords = activeChapter?.wordCount || 0;
   const chapterTarget = activeChapter?.targetWordCount || 2500;
   const chapterPercent = Math.min(100, Math.round((chapterWords / Math.max(1, chapterTarget)) * 100));
 
-  // Circular progress SVG values
-  // Circle 1 (Outer - Daily Goal): radius 34, perimeter = 2 * PI * 34 ≈ 213.6
   const outerRadius = 34;
   const outerCircumference = 2 * Math.PI * outerRadius;
   const outerOffset = outerCircumference - (dailyPercent / 100) * outerCircumference;
 
-  // Circle 2 (Inner - Active Chapter): radius 26, perimeter = 2 * PI * 26 ≈ 163.3
   const innerRadius = 26;
   const innerCircumference = 2 * Math.PI * innerRadius;
   const innerOffset = innerCircumference - (chapterPercent / 100) * innerCircumference;
@@ -85,7 +77,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
 
   return (
     <div className="bg-neutral-950/90 border-t border-neutral-800/90 p-3 select-none">
-      {/* Widget Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Target className="w-3.5 h-3.5 text-amber-400" />
@@ -106,7 +97,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
         </button>
       </div>
 
-      {/* Editing Form Overlay */}
       {isEditingGoals ? (
         <form onSubmit={handleSaveGoals} className="space-y-2 pt-1 text-xs">
           <div>
@@ -184,38 +174,18 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
           </div>
         </form>
       ) : (
-        /* Circular Progress & Quick Metrics */
         <div className="space-y-2.5">
           <div className="flex items-center gap-3">
-            {/* Concentric Circular Progress Ring */}
             <div
               className="relative w-20 h-20 shrink-0 cursor-pointer flex items-center justify-center group"
               onClick={() => {
-                // Cycle view mode
                 setViewMode((prev) => (prev === 'daily' ? 'chapter' : prev === 'chapter' ? 'book' : 'daily'));
               }}
               title="Click to toggle focus between Daily, Chapter, and Book goals"
             >
               <svg className="w-20 h-20 -rotate-90 transform" viewBox="0 0 80 80">
-                {/* Background tracks */}
-                <circle
-                  cx="40"
-                  cy="40"
-                  r={outerRadius}
-                  stroke="#262626"
-                  strokeWidth="5"
-                  fill="none"
-                />
-                <circle
-                  cx="40"
-                  cy="40"
-                  r={innerRadius}
-                  stroke="#1c1c1c"
-                  strokeWidth="4"
-                  fill="none"
-                />
-
-                {/* Outer Ring: Daily Output Progress */}
+                <circle cx="40" cy="40" r={outerRadius} stroke="#262626" strokeWidth="5" fill="none" />
+                <circle cx="40" cy="40" r={innerRadius} stroke="#1c1c1c" strokeWidth="4" fill="none" />
                 <circle
                   cx="40"
                   cy="40"
@@ -228,8 +198,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
                   fill="none"
                   className="transition-all duration-500 ease-out"
                 />
-
-                {/* Inner Ring: Chapter Progress */}
                 <circle
                   cx="40"
                   cy="40"
@@ -244,7 +212,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
                 />
               </svg>
 
-              {/* Center percentage and label */}
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 {viewMode === 'daily' ? (
                   <>
@@ -277,9 +244,7 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
               </div>
             </div>
 
-            {/* Metrics Breakdown */}
             <div className="flex-1 min-w-0 space-y-1.5 text-xs">
-              {/* Daily Progress */}
               <div
                 onClick={() => setViewMode('daily')}
                 className={`p-1.5 rounded cursor-pointer transition ${
@@ -297,7 +262,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
                     {wordsToday.toLocaleString()} <span className="text-neutral-500 font-normal">/ {dailyGoal.toLocaleString()}w</span>
                   </span>
                 </div>
-                {/* Progress Mini Bar */}
                 <div className="w-full bg-neutral-800 h-1 rounded-full mt-1 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
@@ -308,7 +272,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
                 </div>
               </div>
 
-              {/* Active Chapter Progress */}
               <div
                 onClick={() => setViewMode('chapter')}
                 className={`p-1.5 rounded cursor-pointer transition ${
@@ -326,7 +289,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
                     {chapterWords.toLocaleString()} <span className="text-neutral-500 font-normal">/ {chapterTarget.toLocaleString()}w</span>
                   </span>
                 </div>
-                {/* Progress Mini Bar */}
                 <div className="w-full bg-neutral-800 h-1 rounded-full mt-1 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
@@ -339,7 +301,6 @@ export const GoalTrackerWidget: React.FC<GoalTrackerWidgetProps> = ({
             </div>
           </div>
 
-          {/* Book Total Footer Summary */}
           <div
             onClick={() => setViewMode('book')}
             className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer text-[10px] text-neutral-400 transition ${

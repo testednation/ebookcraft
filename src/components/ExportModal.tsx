@@ -1,30 +1,17 @@
 import React, { useState } from 'react';
-import {
-  X,
-  Download,
-  Book,
-  Printer,
-  FileCode,
-  FileArchive,
-  Upload,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
-import { Book as BookType, Chapter, CharacterProfile } from '../types/book';
+import { Book, Chapter } from '../types/book';
 import { generateEpubBlob } from '../services/epubCompiler';
-import { openPrintDialog } from '../services/printCompiler';
-import { exportFullBackupJSON, importFullBackupJSON } from '../services/storage';
-import { importTextOrMarkdownFile } from '../services/fileImporter';
+import { generateDocxBlob } from '../services/docxCompiler';
+import { compilePrintReadyHtml } from '../services/printCompiler';
+import { X, Download, FileText, BookOpen, FileCode, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  book: BookType;
+  book: Book;
   chapters: Chapter[];
-  characters: CharacterProfile[];
-  onImportBackup: (imported: { book: BookType; chapters: Chapter[]; characters: CharacterProfile[] }) => void;
-  onImportChapters: (newChapters: Chapter[]) => void;
+  onOpenCoverWrap?: () => void;
+  onOpenPreflight?: () => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -32,329 +19,291 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
   book,
   chapters,
-  characters,
-  onImportBackup,
-  onImportChapters,
+  onOpenCoverWrap,
+  onOpenPreflight,
 }) => {
-  const [isExportingEpub, setIsExportingEpub] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [exportingType, setExportingType] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const showNotice = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
-  // 1. Export EPUB 3
   const handleExportEpub = async () => {
     try {
-      setIsExportingEpub(true);
+      setExportingType('epub');
       const blob = await generateEpubBlob(book, chapters);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(book.title || 'book').replace(/[^a-zA-Z0-9_-]/g, '_')}.epub`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showNotice('success', 'EPUB 3 compiled successfully!');
-    } catch (err: any) {
-      showNotice('error', `EPUB generation failed: ${err.message}`);
+      const safeTitle = (book.title || 'Manuscript').replace(/[^a-zA-Z0-9_-]/g, '_');
+      triggerDownload(blob, `${safeTitle}.epub`);
+      setSuccessMessage('EPUB 3 compiled successfully! Validated for Kindle, Apple Books, and Kobo.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate EPUB: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
-      setIsExportingEpub(false);
+      setExportingType(null);
     }
   };
 
-  // 2. Print-Ready PDF
-  const handleExportPrint = () => {
+  const handleExportDocx = async () => {
     try {
-      openPrintDialog(book, chapters);
-      showNotice('success', 'Print dialogue opened. Select "Save as PDF" in your print destination.');
-    } catch (err: any) {
-      showNotice('error', `Failed to open print preview: ${err.message}`);
+      setExportingType('docx');
+      const blob = await generateDocxBlob(book, chapters);
+      const safeTitle = (book.title || 'Manuscript').replace(/[^a-zA-Z0-9_-]/g, '_');
+      triggerDownload(blob, `${safeTitle}.docx`);
+      setSuccessMessage('Word (.docx) compiled successfully with native headings, part dividers, and footnotes!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate DOCX: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setExportingType(null);
     }
   };
 
-  // 3. Export Markdown / Text
-  const handleExportMarkdown = () => {
+  const handleExportPrintPdf = () => {
     try {
-      let combined = `# ${book.title}\n`;
-      if (book.subtitle) combined += `*${book.subtitle}*\n`;
-      combined += `**Author:** ${book.author}\n\n---\n\n`;
-
-      chapters.forEach((ch) => {
-        combined += `## ${ch.title}\n`;
-        if (ch.subtitle) combined += `*${ch.subtitle}*\n\n`;
-        // Strip basic HTML to text paragraphs
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = ch.content;
-        const textContent = tempDiv.innerText || tempDiv.textContent || '';
-        combined += `${textContent}\n\n---\n\n`;
-      });
-
-      const blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(book.title || 'manuscript').replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showNotice('success', 'Markdown manuscript downloaded!');
-    } catch (err: any) {
-      showNotice('error', `Markdown export failed: ${err.message}`);
-    }
-  };
-
-  // 4. Export JSON Full Project Backup
-  const handleExportBackup = async () => {
-    try {
-      const jsonStr = await exportFullBackupJSON(book.id);
-      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(book.title || 'project').replace(/[^a-zA-Z0-9_-]/g, '_')}_backup.foliocraft.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showNotice('success', 'Project backup exported with all chapters & characters!');
-    } catch (err: any) {
-      showNotice('error', `Backup failed: ${err.message}`);
-    }
-  };
-
-  // Import JSON Backup File
-  const handleImportBackupFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const text = evt.target?.result as string;
-        const restored = await importFullBackupJSON(text);
-        onImportBackup(restored);
-        showNotice('success', 'Project backup successfully restored!');
-      } catch (err: any) {
-        showNotice('error', `Failed to restore backup: ${err.message}`);
+      setExportingType('pdf');
+      const html = compilePrintReadyHtml(book, chapters);
+      // Open print preview in an iframe or dedicated printable window
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        // Give fonts a moment to layout
+        setTimeout(() => {
+          printWindow.print();
+        }, 800);
+        setSuccessMessage('Print document prepared! Use &quot;Save as PDF&quot; in the print dialog for KDP/Ingram.');
+      } else {
+        // Fallback to downloading HTML file if popup is blocked
+        const blob = new Blob([html], { type: 'text/html' });
+        const safeTitle = (book.title || 'Manuscript').replace(/[^a-zA-Z0-9_-]/g, '_');
+        triggerDownload(blob, `${safeTitle}_print_ready.html`);
+        setSuccessMessage('Print layout downloaded as HTML file. Open in Chrome and choose Print -> Save as PDF.');
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  // Import Markdown / Text Chapter File
-  const handleImportManuscriptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const newChapters = await importTextOrMarkdownFile(file, book.id, chapters.length + 1);
-      onImportChapters(newChapters);
-      showNotice('success', `Imported ${newChapters.length} chapter(s) from ${file.name}!`);
-    } catch (err: any) {
-      showNotice('error', `Import failed: ${err.message}`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to compile print layout: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setExportingType(null);
     }
-    e.target.value = '';
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-      <div className="w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-neutral-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-2xl bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-stone-100">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Download className="w-4 h-4 text-amber-400" />
-            <h2 className="text-base font-semibold text-white">Publish, Export &amp; Backup</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/80">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <Download className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-serif font-bold text-stone-100">Export Published Book</h2>
+              <p className="text-xs text-stone-400">
+                Industry-standard files ready for Kindle Direct Publishing, Apple Books, IngramSpark &amp; Editors.
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white rounded"
-            title="Close"
+            className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-800/60 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Notice banner */}
-        {notification && (
-          <div
-            className={`mx-6 mt-4 p-3 rounded-lg text-xs flex items-center gap-2 ${
-              notification.type === 'success'
-                ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300'
-                : 'bg-rose-950/80 border border-rose-800 text-rose-300'
-            }`}
-          >
-            {notification.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            )}
-            <span>{notification.message}</span>
-          </div>
-        )}
+        {/* Content */}
+        <div className="p-6 space-y-4">
+          {successMessage && (
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+          )}
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
-          {/* Main Publishing Formats */}
-          <div>
-            <h3 className="text-neutral-300 font-semibold uppercase tracking-wider text-[11px] mb-3">
-              Distribution Formats
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* EPUB 3 */}
-              <div className="bg-neutral-950/70 border border-neutral-800 rounded-lg p-4 flex flex-col justify-between hover:border-neutral-700 transition">
-                <div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Book className="w-4 h-4 text-amber-400" />
-                    <span className="font-semibold text-sm text-white">EPUB 3 Publication</span>
-                  </div>
-                  <p className="text-neutral-400 text-[11px] leading-relaxed">
-                    Reflowable standard EPUB with embedded styling, automated Table of Contents, and custom fleurons. Ready for Amazon KDP, Apple Books, and Kobo.
-                  </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* EPUB 3 */}
+            <div className="p-4 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/40 flex flex-col justify-between transition-all">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center mb-3">
+                  <BookOpen className="w-5 h-5" />
                 </div>
-                <button
-                  type="button"
-                  onClick={handleExportEpub}
-                  disabled={isExportingEpub}
-                  className="mt-4 w-full py-2 px-3 bg-amber-400 hover:bg-amber-300 text-neutral-950 font-semibold rounded-md transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  {isExportingEpub ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Compiling EPUB...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download .epub</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Print-Ready PDF */}
-              <div className="bg-neutral-950/70 border border-neutral-800 rounded-lg p-4 flex flex-col justify-between hover:border-neutral-700 transition">
-                <div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Printer className="w-4 h-4 text-amber-400" />
-                    <span className="font-semibold text-sm text-white">Print-Ready PDF</span>
-                  </div>
-                  <p className="text-neutral-400 text-[11px] leading-relaxed">
-                    Formatted for physical paperback &amp; hardcover printing. Mirrored margins, running headers, and trim size ({book.styleConfig?.trimSize || '5.5x8.5'}).
-                  </p>
+                <h3 className="font-semibold text-sm text-stone-200 mb-1">EPUB 3 eBook</h3>
+                <p className="text-[11px] text-stone-400 mb-3">
+                  Reflowable eBook standard for Apple Books, Amazon KDP, Kobo, Barnes &amp; Noble Nook.
+                </p>
+                <div className="text-[10px] text-stone-500 space-y-0.5 mb-4">
+                  <div>&bull; EPUB 3 popup footnotes</div>
+                  <div>&bull; Full-page part dividers</div>
+                  <div>&bull; Drop caps &amp; fleuron glyphs</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleExportPrint}
-                  className="mt-4 w-full py-2 px-3 bg-neutral-800 hover:bg-neutral-700 text-white font-medium rounded-md transition flex items-center justify-center gap-1.5"
-                >
-                  <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Open Print Dialog</span>
-                </button>
               </div>
+              <button
+                onClick={handleExportEpub}
+                disabled={!!exportingType}
+                className="w-full py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-stone-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {exportingType === 'epub' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Compiling...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download EPUB</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Print-Ready PDF */}
+            <div className="p-4 rounded-xl bg-stone-950 border border-stone-800 hover:border-indigo-500/40 flex flex-col justify-between transition-all">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-3">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-sm text-stone-200 mb-1">Print-Ready PDF</h3>
+                <p className="text-[11px] text-stone-400 mb-3">
+                  Typeset for print-on-demand with exact trim size ({book.styleConfig?.trimSize || '5.5x8.5'}).
+                </p>
+                <div className="text-[10px] text-stone-500 space-y-0.5 mb-4">
+                  <div>&bull; Mirrored inner/outer margins</div>
+                  <div>&bull; Running headers &amp; page numbers</div>
+                  <div>&bull; Bottom-of-page running notes</div>
+                </div>
+              </div>
+              <button
+                onClick={handleExportPrintPdf}
+                disabled={!!exportingType}
+                className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-stone-100 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {exportingType === 'pdf' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Typesetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Generate Print PDF</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Microsoft Word .docx */}
+            <div className="p-4 rounded-xl bg-stone-950 border border-stone-800 hover:border-blue-500/40 flex flex-col justify-between transition-all">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <h3 className="font-semibold text-sm text-stone-200">Word (.docx)</h3>
+                  <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300">
+                    Phase 2
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-400 mb-3">
+                  Styled manuscript for literary agents, proofreaders, and developmental editors.
+                </p>
+                <div className="text-[10px] text-stone-500 space-y-0.5 mb-4">
+                  <div>&bull; Native Word styles (H1, Body)</div>
+                  <div>&bull; Linked XML footnotes</div>
+                  <div>&bull; Part divider page breaks</div>
+                </div>
+              </div>
+              <button
+                onClick={handleExportDocx}
+                disabled={!!exportingType}
+                className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-stone-100 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {exportingType === 'docx' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Packaging...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download DOCX</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Raw Text & Backups */}
-          <div className="pt-3 border-t border-neutral-800">
-            <h3 className="text-neutral-300 font-semibold uppercase tracking-wider text-[11px] mb-3">
-              Manuscript Files &amp; Full Backups
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Markdown Export */}
-              <div className="bg-neutral-950/60 border border-neutral-800 rounded-lg p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="font-medium text-neutral-200 block">Clean Markdown (.md)</span>
-                  <span className="text-[10px] text-neutral-500">
-                    Export all chapters in plain markdown format.
+          {/* Phase 3 Tools Banner: Cover Wrap & Pre-Flight Inspection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div
+              onClick={() => {
+                onClose();
+                onOpenCoverWrap?.();
+              }}
+              className="p-3.5 rounded-xl bg-gradient-to-r from-amber-950/30 to-stone-900 border border-amber-500/30 hover:border-amber-500/60 cursor-pointer transition-all flex items-center justify-between group"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-200 group-hover:text-amber-300 transition-colors">
+                    Full Cover Wrap &amp; Spine
+                  </span>
+                  <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">
+                    Phase 3
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleExportMarkdown}
-                  className="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded transition"
-                  title="Download Markdown"
-                >
-                  <FileCode className="w-4 h-4" />
-                </button>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  Design back cover, barcode &amp; spine width with KDP spine physics.
+                </p>
               </div>
-
-              {/* Project JSON Backup */}
-              <div className="bg-neutral-950/60 border border-neutral-800 rounded-lg p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="font-medium text-neutral-200 block">FolioCraft Project Backup</span>
-                  <span className="text-[10px] text-neutral-500">
-                    Includes all chapters, styles &amp; characters.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleExportBackup}
-                  className="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded transition"
-                  title="Download JSON Project Backup"
-                >
-                  <FileArchive className="w-4 h-4" />
-                </button>
-              </div>
+              <span className="text-xs text-amber-400 group-hover:translate-x-0.5 transition-transform font-bold">&rarr;</span>
             </div>
-          </div>
 
-          {/* Import Section */}
-          <div className="pt-3 border-t border-neutral-800">
-            <h3 className="text-neutral-300 font-semibold uppercase tracking-wider text-[11px] mb-3">
-              Import Content
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Restore Backup */}
-              <label className="bg-neutral-950/60 border border-dashed border-neutral-700 hover:border-amber-500/80 rounded-lg p-3.5 flex items-center gap-3 cursor-pointer transition">
-                <Upload className="w-5 h-5 text-amber-400 shrink-0" />
-                <div>
-                  <span className="font-medium text-neutral-200 block">Restore Project Backup</span>
-                  <span className="text-[10px] text-neutral-500">Upload .foliocraft.json file</span>
+            <div
+              onClick={() => {
+                onClose();
+                onOpenPreflight?.();
+              }}
+              className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 to-stone-900 border border-emerald-500/30 hover:border-emerald-500/60 cursor-pointer transition-all flex items-center justify-between group"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-200 group-hover:text-emerald-300 transition-colors">
+                    Pre-Flight Inspection
+                  </span>
+                  <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
+                    Phase 3
+                  </span>
                 </div>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportBackupFile}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Import Text / Markdown */}
-              <label className="bg-neutral-950/60 border border-dashed border-neutral-700 hover:border-amber-500/80 rounded-lg p-3.5 flex items-center gap-3 cursor-pointer transition">
-                <FileCode className="w-5 h-5 text-amber-400 shrink-0" />
-                <div>
-                  <span className="font-medium text-neutral-200 block">Import Chapters</span>
-                  <span className="text-[10px] text-neutral-500">Upload .md, .txt manuscript</span>
-                </div>
-                <input
-                  type="file"
-                  accept=".md,.txt"
-                  onChange={handleImportManuscriptFile}
-                  className="hidden"
-                />
-              </label>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  Verify gutter margins, bleed, recto openings &amp; printer signature math.
+                </p>
+              </div>
+              <span className="text-xs text-emerald-400 group-hover:translate-x-0.5 transition-transform font-bold">&rarr;</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-neutral-800 bg-neutral-950/60 flex items-center justify-end">
+        <div className="px-6 py-3 border-t border-stone-800 bg-stone-950/80 flex items-center justify-between">
+          <div className="text-[11px] text-stone-500 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Files are packaged locally in your browser with zero latency.</span>
+          </div>
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-md transition"
+            className="px-4 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold transition-colors"
           >
-            Close
+            Done
           </button>
         </div>
       </div>

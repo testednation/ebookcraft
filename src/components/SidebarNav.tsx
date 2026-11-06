@@ -1,495 +1,354 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { Chapter, CharacterProfile, Book, SectionType } from '../types/book';
+import { GoalTrackerWidget } from './GoalTrackerWidget';
+import { importManuscriptFile } from '../services/fileImporter';
 import {
   BookOpen,
+  Plus,
+  Bookmark,
   FileText,
   Users,
-  Plus,
+  Upload,
   Trash2,
   ChevronDown,
   ChevronRight,
-  MoveUp,
-  MoveDown,
-  Search,
+  GripVertical,
+  Target,
   Sparkles,
-  Edit2,
-  Send,
-  UserCheck,
 } from 'lucide-react';
-import { Book, Chapter, SectionGroup, SectionType, CharacterProfile, CharacterRole } from '../types/book';
-import { GoalTrackerWidget } from './GoalTrackerWidget';
 
 interface SidebarNavProps {
-  chapters: Chapter[];
-  activeChapterId: string;
-  onSelectChapter: (id: string) => void;
-  onAddChapter: (group: SectionGroup, type?: SectionType) => void;
-  onDeleteChapter: (id: string) => void;
-  onReorderChapter: (id: string, direction: 'up' | 'down') => void;
-  // Characters
-  characters: CharacterProfile[];
-  onOpenCharacterModal: (character?: CharacterProfile) => void;
-  onDeleteCharacter: (id: string) => void;
-  onInsertCharacterName: (name: string) => void;
-  // Goal Tracking
   book: Book;
+  chapters: Chapter[];
+  selectedChapterId: string;
+  onSelectChapter: (chapterId: string) => void;
+  onAddChapter: (type?: SectionType) => void;
+  onAddPartDivider: () => void;
+  onDeleteChapter: (chapterId: string) => void;
+  characters: CharacterProfile[];
+  onOpenCharacterModal: () => void;
+  onImportManuscript: (result: { bookTitle?: string; chapters: Omit<Chapter, 'id' | 'bookId'>[] }) => void;
   onUpdateBookGoals: (goals: { targetWordCount: number; dailyWordGoal: number; resetTodayBaseline?: boolean }) => void;
   onUpdateChapterTarget: (chapterId: string, target: number) => void;
 }
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({
+  book,
   chapters,
-  activeChapterId,
+  selectedChapterId,
   onSelectChapter,
   onAddChapter,
+  onAddPartDivider,
   onDeleteChapter,
-  onReorderChapter,
   characters,
   onOpenCharacterModal,
-  onDeleteCharacter,
-  onInsertCharacterName,
-  book,
+  onImportManuscript,
   onUpdateBookGoals,
   onUpdateChapterTarget,
 }) => {
-  const [activeTab, setActiveTab] = useState<'manuscript' | 'characters'>('manuscript');
+  const [activeTab, setActiveTab] = useState<'chapters' | 'characters'>('chapters');
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Groups toggle state
-  const [openGroups, setOpenGroups] = useState<Record<SectionGroup, boolean>>({
-    'front-matter': true,
-    body: true,
-    'back-matter': true,
-  });
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  // Character search & filter state
-  const [charSearch, setCharSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | CharacterRole>('all');
-  const [deletingCharId, setDeletingCharId] = useState<string | null>(null);
-
-  const toggleGroup = (group: SectionGroup) => {
-    setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+    try {
+      setIsImporting(true);
+      const result = await importManuscriptFile(file);
+      onImportManuscript(result);
+    } catch (err) {
+      console.error(err);
+      alert('Import failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
-  const frontMatterChapters = chapters.filter((c) => c.group === 'front-matter');
+  const frontMatter = chapters.filter((c) => c.group === 'front-matter');
   const bodyChapters = chapters.filter((c) => c.group === 'body');
-  const backMatterChapters = chapters.filter((c) => c.group === 'back-matter');
+  const backMatter = chapters.filter((c) => c.group === 'back-matter');
 
-  // Filtered characters
-  const filteredCharacters = characters.filter((char) => {
-    const matchesSearch =
-      char.name.toLowerCase().includes(charSearch.toLowerCase()) ||
-      (char.aliases && char.aliases.toLowerCase().includes(charSearch.toLowerCase())) ||
-      char.physicalTraits.toLowerCase().includes(charSearch.toLowerCase()) ||
-      (char.occupation && char.occupation.toLowerCase().includes(charSearch.toLowerCase()));
-    const matchesRole = roleFilter === 'all' || char.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  const selectedChapter = chapters.find((c) => c.id === selectedChapterId);
 
-  const renderChapterItem = (chapter: Chapter, index: number, groupList: Chapter[]) => {
-    const isActive = chapter.id === activeChapterId;
-    const target = chapter.targetWordCount || (chapter.group === 'body' ? 2500 : 500);
-    const pct = Math.min(100, Math.round(((chapter.wordCount || 0) / target) * 100));
-    const miniRadius = 5;
-    const miniCircumference = 2 * Math.PI * miniRadius; // ~31.42
-    const miniOffset = miniCircumference - (pct / 100) * miniCircumference;
+  return (
+    <aside className="w-72 bg-stone-950 border-r border-stone-800 flex flex-col h-full select-none shrink-0 text-stone-300">
+      {/* Navigation Tabs: Manuscript Chapters vs Characters */}
+      <div className="flex items-center border-b border-stone-800 bg-stone-900/40 p-1.5 gap-1 shrink-0">
+        <button
+          onClick={() => setActiveTab('chapters')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            activeTab === 'chapters'
+              ? 'bg-stone-800 text-stone-100 shadow-sm'
+              : 'text-stone-400 hover:text-stone-200 hover:bg-stone-850'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+          <span>Manuscript</span>
+          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-stone-700/60 text-stone-300">
+            {chapters.length}
+          </span>
+        </button>
 
-    return (
-      <div
-        key={chapter.id}
-        onClick={() => onSelectChapter(chapter.id)}
-        className={`group relative flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition border ${
-          isActive
-            ? 'bg-amber-500/15 border-amber-500/40 text-amber-200 font-medium shadow-xs'
-            : 'border-transparent text-neutral-300 hover:bg-neutral-800/80 hover:text-white'
-        }`}
-      >
-        <div className="flex items-center gap-2 truncate flex-1 min-w-0 pr-2">
-          <FileText
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isActive ? 'text-amber-400' : 'text-neutral-500 group-hover:text-neutral-300'
-            }`}
-          />
-          <div className="truncate">
-            <span className="truncate block font-medium">
-              {chapter.title || 'Untitled Section'}
-            </span>
-            {chapter.subtitle && (
-              <span className="text-[10px] text-neutral-500 truncate block">
-                {chapter.subtitle}
-              </span>
+        <button
+          onClick={() => setActiveTab('characters')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            activeTab === 'characters'
+              ? 'bg-stone-800 text-stone-100 shadow-sm'
+              : 'text-stone-400 hover:text-stone-200 hover:bg-stone-850'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Characters</span>
+          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-stone-700/60 text-stone-300">
+            {characters.length}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'chapters' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Action Toolbar */}
+          <div className="p-2 border-b border-stone-800/80 bg-stone-950/60 flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => onAddChapter('chapter')}
+              className="flex-1 py-1.5 px-2 rounded-lg bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-200 text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+              title="Add Chapter (Ctrl+N)"
+            >
+              <Plus className="w-3.5 h-3.5 text-amber-400" />
+              <span>Chapter</span>
+            </button>
+
+            <button
+              onClick={onAddPartDivider}
+              className="py-1.5 px-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-1 transition-colors"
+              title="Add Full-Page Part Divider (Phase 2)"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+              <span>+ Part</span>
+            </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="p-1.5 rounded-lg bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs transition-colors flex items-center justify-center"
+              title="Import DOCX, TXT, or MD"
+            >
+              <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.txt,.md"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </div>
+
+          {/* Chapters Hierarchy List */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-4">
+            {/* Front Matter */}
+            {frontMatter.length > 0 && (
+              <div>
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                  Front Matter
+                </div>
+                <div className="space-y-1 mt-1">
+                  {frontMatter.map((ch) => renderChapterItem(ch))}
+                </div>
+              </div>
+            )}
+
+            {/* Body Matter (Parts & Chapters) */}
+            <div>
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center justify-between">
+                <span>Body Chapters</span>
+                <span className="text-stone-600 font-mono text-[9px]">{bodyChapters.length} sections</span>
+              </div>
+              <div className="space-y-1 mt-1">
+                {bodyChapters.map((ch) => renderChapterItem(ch))}
+              </div>
+            </div>
+
+            {/* Back Matter */}
+            {backMatter.length > 0 && (
+              <div>
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                  Back Matter
+                </div>
+                <div className="space-y-1 mt-1">
+                  {backMatter.map((ch) => renderChapterItem(ch))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar Footer: Concentric Circular Goal Tracker Widget */}
+          <div className="p-3 border-t border-stone-800 bg-stone-900/60 shrink-0">
+            <GoalTrackerWidget
+              book={book}
+              chapters={chapters}
+              activeChapter={selectedChapter || null}
+              onUpdateBookGoals={onUpdateBookGoals}
+              onUpdateChapterTarget={onUpdateChapterTarget}
+            />
+          </div>
+        </div>
+      ) : (
+        /* Characters Bible Tab */
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-2 border-b border-stone-800/80 bg-stone-950/60 flex items-center justify-between shrink-0">
+            <span className="text-[11px] font-semibold text-stone-400">Cast Profiles</span>
+            <button
+              onClick={onOpenCharacterModal}
+              className="py-1 px-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold flex items-center gap-1 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add / Manage</span>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {characters.length === 0 ? (
+              <div className="p-6 text-center text-stone-500 text-xs">
+                <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p>No characters created yet.</p>
+                <button
+                  onClick={onOpenCharacterModal}
+                  className="mt-2 text-amber-400 hover:underline font-medium text-xs inline-block"
+                >
+                  Create first character &rarr;
+                </button>
+              </div>
+            ) : (
+              characters.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={onOpenCharacterModal}
+                  className="p-2 rounded-xl bg-stone-900/80 border border-stone-800/80 hover:border-indigo-500/40 hover:bg-stone-850 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-stone-200">{c.name}</span>
+                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-stone-800 text-stone-400 font-medium">
+                      {c.role}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-400 line-clamp-1 mt-0.5">
+                    {c.physicalTraits || c.bio || 'Profile record'}
+                  </p>
+                </div>
+              ))
             )}
           </div>
         </div>
+      )}
+    </aside>
+  );
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Per-chapter progress circular meter */}
-          <div
-            className="flex items-center gap-1 text-[10px] text-neutral-500 group-hover:hidden"
-            title={`Chapter Goal: ${chapter.wordCount || 0} / ${target} words (${pct}%)`}
-          >
-            <svg className="w-3.5 h-3.5 -rotate-90 transform shrink-0" viewBox="0 0 16 16">
-              <circle cx="8" cy="8" r="5" stroke="#262626" strokeWidth="2" fill="none" />
-              <circle
-                cx="8"
-                cy="8"
-                r="5"
-                stroke={pct >= 100 ? '#10b981' : isActive ? '#f59e0b' : '#38bdf8'}
-                strokeWidth="2"
-                strokeDasharray={miniCircumference}
-                strokeDashoffset={miniOffset}
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-            <span className="font-mono">{chapter.wordCount > 0 ? `${chapter.wordCount}w` : '0w'}</span>
-          </div>
+  function renderChapterItem(ch: Chapter) {
+    const isSelected = selectedChapterId === ch.id;
+    const isPart = ch.type === 'part';
 
-          {/* Action buttons on hover */}
-          <div className="hidden group-hover:flex items-center gap-0.5">
-            {index > 0 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReorderChapter(chapter.id, 'up');
-                }}
-                className="p-1 hover:text-white text-neutral-400 rounded hover:bg-neutral-700/60"
-                title="Move section up"
-              >
-                <MoveUp className="w-3 h-3" />
-              </button>
-            )}
-            {index < groupList.length - 1 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReorderChapter(chapter.id, 'down');
-                }}
-                className="p-1 hover:text-white text-neutral-400 rounded hover:bg-neutral-700/60"
-                title="Move section down"
-              >
-                <MoveDown className="w-3 h-3" />
-              </button>
-            )}
+    if (isPart) {
+      // High-visibility Part Divider in Sidebar
+      return (
+        <div
+          key={ch.id}
+          onClick={() => onSelectChapter(ch.id)}
+          className={`group relative p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+            isSelected
+              ? 'bg-amber-500/15 border-amber-500/70 text-amber-300 ring-1 ring-amber-500/40'
+              : 'bg-stone-900/90 border-stone-800/80 hover:border-stone-700 text-stone-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Bookmark className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
+                PART {ch.partNumber ? toRoman(ch.partNumber) : 'DIVIDER'}
+              </span>
+            </div>
             {chapters.length > 1 && (
               <button
-                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm(`Delete "${chapter.title}"?`)) {
-                    onDeleteChapter(chapter.id);
-                  }
+                  onDeleteChapter(ch.id);
                 }}
-                className="p-1 hover:text-red-400 text-neutral-400 rounded hover:bg-neutral-700/60 ml-0.5"
-                title="Delete section"
+                className="opacity-0 group-hover:opacity-100 p-1 text-stone-500 hover:text-rose-400 rounded transition-opacity"
+                title="Delete Part Divider"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
             )}
           </div>
+          <div className="text-xs font-serif font-bold text-stone-100 mt-0.5 truncate">{ch.title}</div>
         </div>
-      </div>
-    );
-  };
+      );
+    }
 
-  const renderGroup = (
-    groupKey: SectionGroup,
-    title: string,
-    list: Chapter[],
-    defaultType: SectionType
-  ) => {
-    const isOpen = openGroups[groupKey];
-    const totalWords = list.reduce((acc, curr) => acc + (curr.wordCount || 0), 0);
-
+    // Standard Chapter item
     return (
-      <div className="mb-4">
-        <div className="flex items-center justify-between px-2 py-1 mb-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 select-none">
-          <button
-            onClick={() => toggleGroup(groupKey)}
-            className="flex items-center gap-1.5 hover:text-neutral-200 transition"
-          >
-            {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            <span>{title}</span>
-            <span className="text-[10px] text-neutral-500 font-normal normal-case">
-              ({list.length})
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onAddChapter(groupKey, defaultType)}
-            className="p-1 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition"
-            title={`Add new ${title} section (Ctrl+N)`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
+      <div
+        key={ch.id}
+        onClick={() => onSelectChapter(ch.id)}
+        className={`group relative px-2.5 py-2 rounded-lg text-left cursor-pointer transition-all flex items-center justify-between ${
+          isSelected
+            ? 'bg-stone-850 text-stone-100 font-medium border border-stone-700/70 shadow-sm'
+            : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900/60'
+        }`}
+      >
+        <div className="flex items-center gap-2 truncate">
+          <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-400' : 'text-stone-600'}`} />
+          <div className="truncate">
+            <div className="text-xs truncate">{ch.title || 'Untitled Chapter'}</div>
+            <div className="text-[10px] text-stone-500 font-mono">
+              {(ch.wordCount || 0).toLocaleString()} words
+              {ch.footnotes && ch.footnotes.length > 0 && ` \u2022 ${ch.footnotes.length} fn`}
+            </div>
+          </div>
         </div>
 
-        {isOpen && (
-          <div className="space-y-0.5 pl-1.5 border-l border-neutral-800/80 ml-2">
-            {list.map((ch, idx) => renderChapterItem(ch, idx, list))}
-            {list.length === 0 && (
-              <div className="px-3 py-2 text-[11px] text-neutral-500 italic">No sections</div>
-            )}
-          </div>
+        {chapters.length > 1 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteChapter(ch.id);
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 text-stone-500 hover:text-rose-400 rounded transition-opacity shrink-0"
+            title="Delete Section"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
         )}
       </div>
     );
-  };
-
-  return (
-    <aside className="w-72 bg-neutral-900 border-r border-neutral-800 flex flex-col h-full select-none shrink-0 text-neutral-200">
-      {/* Top Tab Switcher: Manuscript vs Characters */}
-      <div className="p-2 border-b border-neutral-800 bg-neutral-950/40">
-        <div className="grid grid-cols-2 p-0.5 bg-neutral-900 rounded-lg border border-neutral-800">
-          <button
-            onClick={() => setActiveTab('manuscript')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition ${
-              activeTab === 'manuscript'
-                ? 'bg-neutral-800 text-amber-300 shadow-xs'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Manuscript</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('characters')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition relative ${
-              activeTab === 'characters'
-                ? 'bg-neutral-800 text-amber-300 shadow-xs'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Characters</span>
-            {characters.length > 0 && (
-              <span className="ml-1 text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-400 rounded-full font-mono">
-                {characters.length}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Main Tab Content */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {activeTab === 'manuscript' ? (
-          <div>
-            {renderGroup('front-matter', 'Front Matter', frontMatterChapters, 'title-page')}
-            {renderGroup('body', 'Body Chapters', bodyChapters, 'chapter')}
-            {renderGroup('back-matter', 'Back Matter', backMatterChapters, 'about-author')}
-          </div>
-        ) : (
-          /* Characters View */
-          <div className="space-y-3">
-            {/* Header & Add Button */}
-            <div className="flex items-center justify-between pb-1">
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                  Dramatis Personae
-                </h3>
-                <p className="text-[10px] text-neutral-500">
-                  {filteredCharacters.length} character{filteredCharacters.length === 1 ? '' : 's'}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onOpenCharacterModal()}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-amber-400 hover:bg-amber-300 text-neutral-950 rounded-md transition shadow-xs"
-              >
-                <Plus className="w-3 h-3" />
-                <span>New</span>
-              </button>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-3 h-3 text-neutral-500 absolute left-2.5 top-2.5" />
-              <input
-                type="text"
-                value={charSearch}
-                onChange={(e) => setCharSearch(e.target.value)}
-                placeholder="Search characters or traits..."
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-md pl-7 pr-2.5 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            {/* Role Filter Chips */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px]">
-              {(['all', 'protagonist', 'antagonist', 'supporting', 'minor'] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRoleFilter(r)}
-                  className={`px-2 py-0.5 rounded-full capitalize whitespace-nowrap transition ${
-                    roleFilter === r
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-medium'
-                      : 'bg-neutral-800/80 text-neutral-400 hover:text-white border border-transparent'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-
-            {/* Characters List */}
-            <div className="space-y-2 pt-1">
-              {filteredCharacters.map((char) => {
-                const isConfirmingDelete = deletingCharId === char.id;
-
-                return (
-                  <div
-                    key={char.id}
-                    className="group bg-neutral-950/60 border border-neutral-800 hover:border-neutral-700/80 rounded-lg p-2.5 transition relative space-y-1.5"
-                  >
-                    {/* Header Row */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {/* Avatar Badge */}
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-neutral-950 shrink-0"
-                          style={{ backgroundColor: char.color || '#f59e0b' }}
-                        >
-                          {char.name.charAt(0).toUpperCase()}
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs font-semibold text-white leading-tight">
-                            {char.name}
-                          </h4>
-                          {char.occupation && (
-                            <span className="text-[10px] text-neutral-400 block leading-tight">
-                              {char.occupation}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Role Pill */}
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider ${
-                          char.role === 'protagonist'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : char.role === 'antagonist'
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {char.role}
-                      </span>
-                    </div>
-
-                    {/* Physical Traits Snippet */}
-                    {char.physicalTraits && (
-                      <div className="text-[10.5px] text-neutral-400 line-clamp-2 leading-relaxed bg-neutral-900/60 p-1.5 rounded border border-neutral-800/50">
-                        <span className="text-neutral-500 font-medium">Traits: </span>
-                        {char.physicalTraits}
-                      </div>
-                    )}
-
-                    {/* Bio Snippet if no traits */}
-                    {!char.physicalTraits && char.bio && (
-                      <div className="text-[10.5px] text-neutral-400 line-clamp-2 leading-relaxed bg-neutral-900/60 p-1.5 rounded border border-neutral-800/50">
-                        {char.bio}
-                      </div>
-                    )}
-
-                    {/* Action Bar */}
-                    <div className="flex items-center justify-between pt-1 border-t border-neutral-900 text-[10px]">
-                      {/* One-Click Insert into manuscript */}
-                      <button
-                        type="button"
-                        onClick={() => onInsertCharacterName(char.name)}
-                        className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-medium hover:underline py-0.5"
-                        title={`Insert "${char.name}" into current chapter`}
-                      >
-                        <Send className="w-2.5 h-2.5" />
-                        <span>Insert Name</span>
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => onOpenCharacterModal(char)}
-                          className="p-1 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
-                          title="Edit character profile"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-
-                        {isConfirmingDelete ? (
-                          <div className="flex items-center gap-1 bg-red-950/80 px-1 py-0.5 rounded border border-red-800">
-                            <span className="text-[9px] text-red-300">Confirm?</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onDeleteCharacter(char.id);
-                                setDeletingCharId(null);
-                              }}
-                              className="text-red-200 hover:text-white font-bold px-1"
-                            >
-                              Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingCharId(null)}
-                              className="text-neutral-400 hover:text-neutral-200 px-1"
-                            >
-                              No
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setDeletingCharId(char.id)}
-                            className="p-1 text-neutral-500 hover:text-red-400 rounded hover:bg-neutral-800"
-                            title="Delete character"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filteredCharacters.length === 0 && (
-                <div className="text-center py-8 px-3 border border-dashed border-neutral-800 rounded-lg text-neutral-500 text-xs">
-                  <Users className="w-6 h-6 mx-auto mb-2 text-neutral-600" />
-                  <p className="font-medium text-neutral-400">No characters found</p>
-                  <p className="text-[11px] mt-1 text-neutral-500">
-                    Add character profiles to reference traits while writing.
-                  </p>
-                  <button
-                    onClick={() => onOpenCharacterModal()}
-                    className="mt-3 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-amber-300 rounded text-xs transition"
-                  >
-                    + Add First Character
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Circular Goal Tracking Dashboard */}
-      <GoalTrackerWidget
-        book={book}
-        chapters={chapters}
-        activeChapter={chapters.find((c) => c.id === activeChapterId) || null}
-        onUpdateBookGoals={onUpdateBookGoals}
-        onUpdateChapterTarget={onUpdateChapterTarget}
-      />
-
-      {/* Footer / Shortcuts Help */}
-      <div className="p-2.5 border-t border-neutral-800 bg-neutral-950/60 text-[10px] text-neutral-500 flex items-center justify-between">
-        <span className="truncate">Ctrl+N: New Section</span>
-        <span className="truncate">Ctrl+P: Preview</span>
-      </div>
-    </aside>
-  );
+  }
 };
+
+function toRoman(num: number): string {
+  const lookup: { [key: string]: number } = {
+    M: 1000,
+    CM: 900,
+    D: 500,
+    CD: 400,
+    C: 100,
+    XC: 90,
+    L: 50,
+    XL: 40,
+    X: 10,
+    IX: 9,
+    V: 5,
+    IV: 4,
+    I: 1,
+  };
+  let roman = '';
+  for (const i in lookup) {
+    while (num >= lookup[i]) {
+      roman += i;
+      num -= lookup[i];
+    }
+  }
+  return roman || `${num}`;
+}

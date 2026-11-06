@@ -44,6 +44,13 @@ export const ORNAMENTS: OrnamentDefinition[] = [
   },
 ];
 
-export const getOrnamentById = (id: string): OrnamentDefinition => {
+export const ORNAMENT_COLLECTION = ORNAMENTS;
+
+export const getOrnamentById = (id?: string): OrnamentDefinition => {
   return ORNAMENTS.find((o) => o.id === id) || ORNAMENTS[0];
+};
+
+export const getOrnamentSvg = (id?: string): string => {
+  const ornament = getOrnamentById(id);
+  return ornament ? ornament.svg : '';
 };

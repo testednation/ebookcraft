@@ -3,14 +3,23 @@ export type SectionType =
   | 'copyright'
   | 'dedication'
   | 'epigraph'
+  | 'foreword'
   | 'toc'
+  | 'part'
   | 'prologue'
   | 'chapter'
   | 'epilogue'
   | 'afterword'
+  | 'acknowledgments'
   | 'about-author';
 
 export type SectionGroup = 'front-matter' | 'body' | 'back-matter';
+
+export interface FootnoteItem {
+  id: string;
+  number: number;
+  text: string;
+}
 
 export interface Chapter {
   id: string;
@@ -18,6 +27,7 @@ export interface Chapter {
   title: string;
   subtitle?: string;
   number?: number;
+  partNumber?: number; // Optional Part number if section is a 'part'
   type: SectionType;
   group: SectionGroup;
   content: string; // HTML content from rich editor
@@ -25,8 +35,11 @@ export interface Chapter {
   wordCount: number;
   targetWordCount?: number; // Per-chapter goal (e.g. 2500 words)
   customOrnamentId?: string;
+  headerImage?: string; // Optional custom chapter banner or header illustration (Phase 3)
+  headerImagePlacement?: 'banner' | 'full-bleed' | 'ornament';
   includeInToc: boolean;
   pageBreakBefore: boolean;
+  footnotes?: FootnoteItem[];
 }
 
 export type GenreThemeId = 'literary' | 'modern' | 'fantasy' | 'nonfiction';
@@ -41,6 +54,19 @@ export type FontChoice =
   | 'system-ui';
 
 export type DropCapStyle = 'none' | 'simple' | 'illuminated' | 'raised';
+
+export type TrimSize =
+  | '5x8'
+  | '5.25x8'
+  | '5.5x8.5'
+  | '6x9'
+  | '6.14x9.21'
+  | '7x10'
+  | '8.5x11';
+
+export type PaperStock = 'cream-55' | 'white-50' | 'color-70';
+
+export type BindingType = 'paperback' | 'hardcover';
 
 export interface StyleConfig {
   id: string;
@@ -58,10 +84,36 @@ export interface StyleConfig {
   sceneBreakOrnamentId: string;
   pageNumbering: 'bottom-center' | 'bottom-outer' | 'top-outer' | 'none';
   headerText: 'title-and-chapter' | 'author-and-title' | 'none';
-  trimSize: '5x8' | '5.5x8.5' | '6x9';
+  trimSize: TrimSize;
+  paperStock?: PaperStock;
+  rectoChapterOpening?: boolean; // Chapters begin on odd (right-hand) page
+  hyphenation?: boolean;
+  headerBannerStyle?: 'none' | 'botanical' | 'celestial' | 'geometric' | 'custom';
+  headerBannerImage?: string;
 }
 
 export type AutoSaveFrequency = 'immediate' | '5s' | '15s' | '30s' | 'manual';
+
+export interface CoverWrapConfig {
+  frontTitle: string;
+  frontSubtitle?: string;
+  frontAuthor: string;
+  frontCoverImage?: string;
+  backBlurb: string;
+  backAuthorBio?: string;
+  authorPhoto?: string;
+  spineTitle: string;
+  spineAuthor: string;
+  publisherImprint?: string;
+  publisherLogo?: string;
+  paperStock: PaperStock;
+  binding: BindingType;
+  includeBarcode: boolean;
+  priceBarcodeAddon?: string; // e.g. "51999" ($19.99 USD)
+  backgroundColor: string; // hex
+  textColor: string; // hex
+  accentColor: string; // hex
+}
 
 export interface Book {
   id: string;
@@ -72,6 +124,7 @@ export interface Book {
   isbn?: string;
   description?: string;
   coverImage?: string; // Data URL or object URL
+  coverWrap?: CoverWrapConfig; // Complete 360 wrap specs (Phase 3)
   language: string;
   genre: string;
   styleConfig: StyleConfig;

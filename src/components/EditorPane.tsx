@@ -1,490 +1,566 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Chapter, CharacterProfile, FootnoteItem, StyleConfig } from '../types/book';
 import {
   Bold,
   Italic,
-  Strikethrough,
-  Heading1,
-  Heading2,
-  Heading3,
-  Quote,
-  List,
-  ListOrdered,
-  Divide,
-  Scissors,
-  Users,
-  X,
-  Send,
   Sparkles,
-  AlignLeft,
-  AlignCenter,
-  AlignJustify,
-  Clock,
-  Type,
+  BookOpen,
+  FileText,
+  Plus,
+  Trash2,
+  Users,
+  Target,
+  BarChart2,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  Bookmark,
 } from 'lucide-react';
-import { Chapter, CharacterProfile, SectionType } from '../types/book';
 
 interface EditorPaneProps {
-  chapter: Chapter | null;
-  onUpdateChapter: (updates: Partial<Chapter>) => void;
+  chapter: Chapter;
   characters: CharacterProfile[];
-  onOpenCharacterModal: (character?: CharacterProfile) => void;
+  styleConfig: StyleConfig;
+  focusMode: boolean;
+  onUpdateChapter: (updated: Partial<Chapter>) => void;
+  onOpenCharacterModal: () => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
   chapter,
-  onUpdateChapter,
   characters,
+  styleConfig,
+  focusMode,
+  onUpdateChapter,
   onOpenCharacterModal,
 }) => {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [isCharDrawerOpen, setIsCharDrawerOpen] = useState(false);
-  const [charSearchTerm, setCharSearchTerm] = useState('');
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [goalInput, setGoalInput] = useState(2500);
+  const [content, setContent] = useState(chapter.content || '');
+  const [title, setTitle] = useState(chapter.title || '');
+  const [subtitle, setSubtitle] = useState(chapter.subtitle || '');
+  const [partNumber, setPartNumber] = useState<number>(chapter.partNumber || 1);
+  const [showFootnotesDrawer, setShowFootnotesDrawer] = useState(false);
+  const [showReadabilityDrawer, setShowReadabilityDrawer] = useState(false);
+  const [showCharacterQuickRef, setShowCharacterQuickRef] = useState(false);
 
-  // Synchronize content only when switching chapters
+  // Sync state when selected chapter changes
   useEffect(() => {
-    if (contentRef.current && chapter) {
-      if (contentRef.current.innerHTML !== chapter.content) {
-        contentRef.current.innerHTML = chapter.content;
-      }
-    }
-  }, [chapter?.id]);
+    setContent(chapter.content || '');
+    setTitle(chapter.title || '');
+    setSubtitle(chapter.subtitle || '');
+    if (chapter.partNumber) setPartNumber(chapter.partNumber);
+  }, [chapter.id]);
 
-  if (!chapter) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-neutral-950 text-neutral-500 text-sm">
-        Select or create a chapter from the manuscript navigation to begin writing.
-      </div>
-    );
-  }
-
-  // Handle rich formatting commands
-  const executeCommand = (command: string, value: string | undefined = undefined) => {
-    document.execCommand(command, false, value);
-    handleContentInput();
+  const handleTitleChange = (val: string) => {
+    setTitle(val);
+    onUpdateChapter({ title: val });
   };
 
-  const handleContentInput = () => {
-    if (!contentRef.current) return;
-    const newHtml = contentRef.current.innerHTML;
-    const text = contentRef.current.innerText || '';
-    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-    onUpdateChapter({
-      content: newHtml,
-      wordCount,
-    });
+  const handleSubtitleChange = (val: string) => {
+    setSubtitle(val);
+    onUpdateChapter({ subtitle: val });
   };
 
-  // Insert Scene Break ornament
-  const insertSceneBreak = () => {
-    if (!contentRef.current) return;
-    contentRef.current.focus();
-    document.execCommand('insertHorizontalRule', false);
-    handleContentInput();
+  const handlePartNumberChange = (num: number) => {
+    setPartNumber(num);
+    onUpdateChapter({ partNumber: num });
   };
 
-  // Insert Page Break marker
-  const insertPageBreak = () => {
-    if (!contentRef.current) return;
-    contentRef.current.focus();
-    const breakHtml = `<div class="folio-page-break my-6 py-2 border-t-2 border-dashed border-amber-500/40 text-center text-[10px] uppercase tracking-wider text-amber-500/70 select-none">--- Page Break ---</div><p><br></p>`;
-    document.execCommand('insertHTML', false, breakHtml);
-    handleContentInput();
+  const handleContentChange = (val: string) => {
+    setContent(val);
+    const words = countWords(val);
+    onUpdateChapter({ content: val, wordCount: words });
   };
 
-  // Insert character name directly into editor
-  const insertTextAtCursor = (textToInsert: string) => {
-    if (!contentRef.current) return;
-    contentRef.current.focus();
-    document.execCommand('insertText', false, textToInsert);
-    handleContentInput();
+  // Footnote Operations
+  const handleAddFootnote = () => {
+    const currentList = chapter.footnotes || [];
+    const nextNum = currentList.length + 1;
+    const newFn: FootnoteItem = {
+      id: 'fn_' + Date.now(),
+      number: nextNum,
+      text: '',
+    };
+    const updated = [...currentList, newFn];
+    onUpdateChapter({ footnotes: updated });
+    setShowFootnotesDrawer(true);
+
+    // Insert marker into content if appropriate
+    const marker = `<sup class="footnote-ref" data-fn="${newFn.id}">[${nextNum}]</sup>`;
+    handleContentChange(content + ` ${marker} `);
   };
 
-  // Reading time estimate (200 wpm)
-  const readingTimeMin = Math.max(1, Math.ceil((chapter.wordCount || 0) / 200));
+  const handleUpdateFootnote = (fnId: string, text: string) => {
+    const currentList = chapter.footnotes || [];
+    const updated = currentList.map((fn) => (fn.id === fnId ? { ...fn, text } : fn));
+    onUpdateChapter({ footnotes: updated });
+  };
 
-  // Filtered characters for drawer
-  const filteredChars = characters.filter((c) =>
-    c.name.toLowerCase().includes(charSearchTerm.toLowerCase()) ||
-    c.physicalTraits.toLowerCase().includes(charSearchTerm.toLowerCase()) ||
-    (c.aliases && c.aliases.toLowerCase().includes(charSearchTerm.toLowerCase()))
-  );
+  const handleDeleteFootnote = (fnId: string) => {
+    const currentList = chapter.footnotes || [];
+    const updated = currentList
+      .filter((fn) => fn.id !== fnId)
+      .map((fn, idx) => ({ ...fn, number: idx + 1 }));
+    onUpdateChapter({ footnotes: updated });
+  };
+
+  // Scene break inserter
+  const handleInsertSceneBreak = () => {
+    const breakHtml = `\n<p class="scene-break text-center my-6">❦  •  ❦</p>\n<p>`;
+    handleContentChange(content + breakHtml);
+  };
+
+  // Readability computation
+  const readabilityStats = computeReadability(content);
+
+  const isPartDivider = chapter.type === 'part';
 
   return (
-    <main className="flex-1 flex flex-col h-full bg-neutral-950 relative overflow-hidden text-neutral-100">
-      {/* Formatting Toolbar */}
-      <div className="h-11 border-b border-neutral-800 bg-neutral-900/80 px-4 flex items-center justify-between gap-2 overflow-x-auto select-none shrink-0 text-xs">
-        {/* Basic formatting */}
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => executeCommand('bold')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Bold (Ctrl+B)"
-          >
-            <Bold className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('italic')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Italic (Ctrl+I)"
-          >
-            <Italic className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('strikeThrough')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Strikethrough"
-          >
-            <Strikethrough className="w-3.5 h-3.5" />
-          </button>
-
-          <span className="w-px h-4 bg-neutral-800 mx-1" />
-
-          {/* Headings */}
-          <button
-            type="button"
-            onClick={() => executeCommand('formatBlock', '<h1>')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Heading 1"
-          >
-            <Heading1 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('formatBlock', '<h2>')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Heading 2"
-          >
-            <Heading2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('formatBlock', '<p>')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Normal Paragraph"
-          >
-            <Type className="w-3.5 h-3.5" />
-          </button>
-
-          <span className="w-px h-4 bg-neutral-800 mx-1" />
-
-          {/* Lists & Quotes */}
-          <button
-            type="button"
-            onClick={() => executeCommand('formatBlock', '<blockquote>')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Blockquote"
-          >
-            <Quote className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('insertUnorderedList')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Bullet list"
-          >
-            <List className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('insertOrderedList')}
-            className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded"
-            title="Numbered list"
-          >
-            <ListOrdered className="w-3.5 h-3.5" />
-          </button>
-
-          <span className="w-px h-4 bg-neutral-800 mx-1" />
-
-          {/* Book Layout Special Features: Atticus/Vellum Scene Break & Page Break */}
-          <button
-            type="button"
-            onClick={insertSceneBreak}
-            className="flex items-center gap-1 px-2 py-1 text-neutral-300 hover:text-amber-300 hover:bg-neutral-800 rounded transition"
-            title="Insert Ornamental Scene Break (HR)"
-          >
-            <Divide className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline text-[11px]">Scene Break</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={insertPageBreak}
-            className="flex items-center gap-1 px-2 py-1 text-neutral-300 hover:text-amber-300 hover:bg-neutral-800 rounded transition"
-            title="Insert Hard Page Break (Ctrl+Enter)"
-          >
-            <Scissors className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline text-[11px]">Page Break</span>
-          </button>
-        </div>
-
-        {/* Right side: Character Reference quick drawer trigger */}
+    <div
+      className={`flex flex-col h-full overflow-hidden transition-colors duration-300 ${
+        focusMode
+          ? 'bg-[#181614] text-[#e8e4de]'
+          : 'bg-stone-900 text-stone-100'
+      }`}
+    >
+      {/* Editor Sub-Header Toolbar */}
+      <div
+        className={`px-4 py-2 border-b flex items-center justify-between shrink-0 select-none text-xs transition-colors ${
+          focusMode
+            ? 'border-stone-800 bg-[#141210]'
+            : 'border-stone-800 bg-stone-950/80'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsCharDrawerOpen(!isCharDrawerOpen)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition ${
-              isCharDrawerOpen
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
-            }`}
-            title="Toggle Character Profiles Quick Reference"
-          >
-            <Users className="w-3.5 h-3.5 text-amber-400" />
-            <span>Character Cards</span>
-            <span className="text-[10px] bg-neutral-700 px-1.5 py-0.2 rounded-full font-mono text-neutral-300">
-              {characters.length}
+          {isPartDivider ? (
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold text-[11px] border border-amber-500/40 flex items-center gap-1">
+              <Bookmark className="w-3 h-3" />
+              <span>Full-Page Part Divider</span>
             </span>
-          </button>
-        </div>
-      </div>
+          ) : (
+            <span className="text-stone-400 font-mono text-[11px]">
+              {countWords(content).toLocaleString()} words
+              {chapter.targetWordCount && ` / ${chapter.targetWordCount.toLocaleString()} target`}
+            </span>
+          )}
 
-      {/* Editor Main Canvas & Character Reference Drawer */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Writing Paper Canvas */}
-        <div className="flex-1 overflow-y-auto px-6 py-8 flex justify-center">
-          <div className="w-full max-w-2xl bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-8 sm:p-12 shadow-xl min-h-[85vh] flex flex-col">
-            {/* Chapter Header Inputs */}
-            <div className="border-b border-neutral-800/80 pb-6 mb-6">
-              <input
-                type="text"
-                value={chapter.title}
-                onChange={(e) => onUpdateChapter({ title: e.target.value })}
-                placeholder="Chapter Title..."
-                className="w-full bg-transparent text-2xl sm:text-3xl font-serif font-bold text-white placeholder:text-neutral-600 focus:outline-none mb-2"
-              />
-
-              <input
-                type="text"
-                value={chapter.subtitle || ''}
-                onChange={(e) => onUpdateChapter({ subtitle: e.target.value })}
-                placeholder="Subtitle or Epigraph (optional)..."
-                className="w-full bg-transparent text-sm italic text-neutral-400 placeholder:text-neutral-600 focus:outline-none"
-              />
-            </div>
-
-            {/* WYSIWYG Content Area */}
-            <div
-              ref={contentRef}
-              contentEditable
-              onInput={handleContentInput}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  insertPageBreak();
-                }
-              }}
-              className="flex-1 text-base sm:text-lg leading-relaxed font-serif text-neutral-200 focus:outline-none min-h-[300px] selection:bg-amber-500/30 selection:text-amber-100 space-y-4"
-              data-placeholder="Start drafting your chapter..."
-            />
-          </div>
-        </div>
-
-        {/* Slide-out Character Quick Reference Drawer */}
-        {isCharDrawerOpen && (
-          <aside className="w-80 bg-neutral-900 border-l border-neutral-800 flex flex-col h-full z-20 shrink-0 shadow-2xl">
-            <div className="p-3 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/40">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-semibold text-white">Character Quick Reference</span>
-              </div>
+          {!isPartDivider && (
+            <>
+              <div className="h-3 w-px bg-stone-800 mx-1" />
               <button
-                onClick={() => setIsCharDrawerOpen(false)}
-                className="p-1 text-neutral-400 hover:text-white rounded"
+                onClick={handleAddFootnote}
+                className="px-2 py-1 rounded bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                title="Insert Footnote (EPUB 3 popup & Print notes)"
               >
-                <X className="w-3.5 h-3.5" />
+                <Plus className="w-3 h-3 text-amber-400" />
+                <span>Footnote ({chapter.footnotes?.length || 0})</span>
               </button>
-            </div>
 
-            <div className="p-3 border-b border-neutral-800">
-              <input
-                type="text"
-                value={charSearchTerm}
-                onChange={(e) => setCharSearchTerm(e.target.value)}
-                placeholder="Filter character traits..."
-                className="w-full bg-neutral-950 border border-neutral-800 rounded p-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
-              />
-            </div>
+              <button
+                onClick={handleInsertSceneBreak}
+                className="px-2 py-1 rounded bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                title="Insert Scene Break Fleuron"
+              >
+                <span>❦ Break</span>
+              </button>
+            </>
+          )}
+        </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-              {filteredChars.map((char) => (
-                <div
-                  key={char.id}
-                  className="bg-neutral-950/80 border border-neutral-800 rounded-lg p-2.5 text-xs space-y-2 hover:border-neutral-700 transition"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: char.color || '#f59e0b' }}
-                        />
-                        <span className="font-semibold text-neutral-200">{char.name}</span>
+        <div className="flex items-center gap-2">
+          {/* Character Quick-Ref Toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setShowCharacterQuickRef(!showCharacterQuickRef)}
+              className="px-2 py-1 rounded bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 flex items-center gap-1 transition-colors"
+              title="Cast Dossiers"
+            >
+              <Users className="w-3 h-3 text-indigo-400" />
+              <span>Cast ({characters.length})</span>
+            </button>
+
+            {showCharacterQuickRef && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-stone-900 border border-stone-800 rounded-xl shadow-2xl p-3 z-30 animate-fade-in text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-stone-800 pb-1.5">
+                  <span className="font-semibold text-stone-200">Character References</span>
+                  <button
+                    onClick={onOpenCharacterModal}
+                    className="text-[10px] text-amber-400 hover:underline"
+                  >
+                    Manage Cast &rarr;
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                  {characters.length === 0 ? (
+                    <div className="text-stone-500 text-center py-2 text-[11px]">No characters yet.</div>
+                  ) : (
+                    characters.map((c) => (
+                      <div key={c.id} className="p-1.5 rounded bg-stone-950 border border-stone-800/80">
+                        <div className="font-semibold text-amber-300 text-[11px]">{c.name}</div>
+                        <div className="text-[10px] text-stone-400 line-clamp-2">
+                          {c.physicalTraits || c.bio}
+                        </div>
                       </div>
-                      {char.occupation && (
-                        <span className="text-[10px] text-neutral-500 block">{char.occupation}</span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => insertTextAtCursor(char.name)}
-                      className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded text-[10px] font-medium flex items-center gap-1"
-                      title="Insert name at cursor"
-                    >
-                      <Send className="w-2.5 h-2.5" />
-                      <span>Insert</span>
-                    </button>
-                  </div>
-
-                  {char.physicalTraits && (
-                    <div className="bg-neutral-900/60 p-2 rounded border border-neutral-800/60 text-[11px] leading-relaxed text-neutral-300">
-                      <span className="font-medium text-amber-400/90 text-[10px] uppercase block mb-0.5">
-                        Physical Traits:
-                      </span>
-                      {char.physicalTraits}
-                    </div>
-                  )}
-
-                  {char.personalityTraits && (
-                    <div className="text-[10.5px] text-neutral-400 leading-tight">
-                      <span className="text-neutral-500 font-medium">Voice: </span>
-                      {char.personalityTraits}
-                    </div>
-                  )}
-
-                  {char.notes && (
-                    <div className="text-[10px] text-neutral-500 italic border-t border-neutral-900 pt-1">
-                      Notes: {char.notes}
-                    </div>
+                    ))
                   )}
                 </div>
-              ))}
-
-              {filteredChars.length === 0 && (
-                <div className="text-center py-6 text-neutral-500 text-xs">
-                  No matching characters found.
-                </div>
-              )}
-            </div>
-
-            <div className="p-2 border-t border-neutral-800 bg-neutral-950/60 flex justify-between items-center text-[10px] text-neutral-400">
-              <span>Click 'Insert' to add name to editor</span>
-              <button
-                onClick={() => onOpenCharacterModal()}
-                className="text-amber-400 hover:underline"
-              >
-                + New Profile
-              </button>
-            </div>
-          </aside>
-        )}
-      </div>
-
-      {/* Editor Bottom Bar */}
-      <footer className="h-9 border-t border-neutral-800 bg-neutral-900/90 px-4 flex items-center justify-between text-xs text-neutral-400 select-none shrink-0">
-        <div className="flex items-center gap-4">
-          {/* Chapter Word Count & Goal */}
-          <div className="flex items-center gap-1.5">
-            <Type className="w-3.5 h-3.5 text-neutral-500" />
-            <span className="text-neutral-200 font-medium">{chapter.wordCount || 0}</span>
-            <span className="text-neutral-600">/</span>
-            {isEditingGoal ? (
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  step="100"
-                  min="100"
-                  autoFocus
-                  value={goalInput}
-                  onChange={(e) => setGoalInput(parseInt(e.target.value, 10) || 500)}
-                  onBlur={() => {
-                    onUpdateChapter({ targetWordCount: goalInput });
-                    setIsEditingGoal(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      onUpdateChapter({ targetWordCount: goalInput });
-                      setIsEditingGoal(false);
-                    } else if (e.key === 'Escape') {
-                      setIsEditingGoal(false);
-                    }
-                  }}
-                  className="w-16 bg-neutral-950 border border-amber-500 rounded px-1 py-0.5 text-[11px] text-white font-mono focus:outline-none"
-                />
-                <span className="text-[10px] text-neutral-500">w</span>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setGoalInput(chapter.targetWordCount || (chapter.group === 'body' ? 2500 : 500));
-                  setIsEditingGoal(true);
-                }}
-                className="hover:text-amber-300 transition flex items-center gap-1 group"
-                title="Click to edit chapter word goal"
-              >
-                <span className="font-mono text-neutral-400 group-hover:text-amber-300">
-                  {chapter.targetWordCount || (chapter.group === 'body' ? 2500 : 500)}w
-                </span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                    Math.round(
-                      ((chapter.wordCount || 0) /
-                        (chapter.targetWordCount || (chapter.group === 'body' ? 2500 : 500))) *
-                        100
-                    ) >= 100
-                      ? 'bg-emerald-500/20 text-emerald-400 font-semibold'
-                      : 'bg-neutral-800 text-neutral-400'
-                  }`}
-                >
-                  {Math.min(
-                    100,
-                    Math.round(
-                      ((chapter.wordCount || 0) /
-                        (chapter.targetWordCount || (chapter.group === 'body' ? 2500 : 500))) *
-                        100
-                    )
-                  )}
-                  %
-                </span>
-              </button>
             )}
           </div>
 
-          <span className="flex items-center gap-1.5 hidden sm:flex">
-            <Clock className="w-3.5 h-3.5 text-neutral-500" />
-            ~{readingTimeMin} min read
-          </span>
-        </div>
+          {/* Readability Meter Toggle */}
+          {!isPartDivider && (
+            <button
+              onClick={() => setShowReadabilityDrawer(!showReadabilityDrawer)}
+              className={`px-2 py-1 rounded border flex items-center gap-1 transition-colors ${
+                showReadabilityDrawer
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                  : 'bg-stone-850 border-stone-800 text-stone-300 hover:bg-stone-800'
+              }`}
+            >
+              <BarChart2 className="w-3 h-3 text-emerald-400" />
+              <span>Grade {readabilityStats.gradeLevel}</span>
+            </button>
+          )}
 
-        {/* Chapter Section Settings */}
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-neutral-400">
-            <span>Include in TOC:</span>
-            <input
-              type="checkbox"
-              checked={chapter.includeInToc}
-              onChange={(e) => onUpdateChapter({ includeInToc: e.target.checked })}
-              className="accent-amber-500 rounded"
-            />
-          </label>
-
-          <label className="flex items-center gap-1.5 text-xs text-neutral-400">
-            <span>Page Break Before:</span>
-            <input
-              type="checkbox"
-              checked={chapter.pageBreakBefore}
-              onChange={(e) => onUpdateChapter({ pageBreakBefore: e.target.checked })}
-              className="accent-amber-500 rounded"
-            />
-          </label>
+          {/* Footnotes Drawer Toggle */}
+          {!isPartDivider && (chapter.footnotes?.length || 0) > 0 && (
+            <button
+              onClick={() => setShowFootnotesDrawer(!showFootnotesDrawer)}
+              className="px-2 py-1 rounded bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 flex items-center gap-1"
+            >
+              <FileText className="w-3 h-3 text-violet-400" />
+              <span>Notes</span>
+              {showFootnotesDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
         </div>
-      </footer>
-    </main>
+      </div>
+
+      {/* Readability Analysis Drawer */}
+      {showReadabilityDrawer && (
+        <div className="border-b border-stone-800 bg-stone-950/95 p-4 shrink-0 animate-fade-in text-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-emerald-400" />
+              <h4 className="font-semibold text-stone-200">Flesch-Kincaid Prose Analysis</h4>
+            </div>
+            <button
+              onClick={() => setShowReadabilityDrawer(false)}
+              className="text-stone-500 hover:text-stone-300 text-xs"
+            >
+              &times; Close
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <div className="p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-center">
+              <div className="text-[10px] text-stone-400 uppercase tracking-wider">Grade Level</div>
+              <div className="text-base font-bold text-amber-400 mt-0.5">{readabilityStats.gradeLevel}</div>
+              <div className="text-[9px] text-stone-500">{readabilityStats.gradeCategory}</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-center">
+              <div className="text-[10px] text-stone-400 uppercase tracking-wider">Reading Ease</div>
+              <div className="text-base font-bold text-emerald-400 mt-0.5">{readabilityStats.readingEase} / 100</div>
+              <div className="text-[9px] text-stone-500">{readabilityStats.easeCategory}</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-center">
+              <div className="text-[10px] text-stone-400 uppercase tracking-wider">Avg Sentence</div>
+              <div className="text-base font-bold text-stone-200 mt-0.5">{readabilityStats.avgWordsPerSentence} words</div>
+              <div className="text-[9px] text-stone-500">Pacing guide</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-center">
+              <div className="text-[10px] text-stone-400 uppercase tracking-wider">Complex Words</div>
+              <div className="text-base font-bold text-indigo-400 mt-0.5">{readabilityStats.complexWordsPercentage}%</div>
+              <div className="text-[9px] text-stone-500">3+ syllables</div>
+            </div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-stone-900/80 border border-stone-800 text-stone-300 text-[11px] leading-relaxed">
+            <span className="font-semibold text-amber-300">Style Suggestion: </span>
+            {readabilityStats.suggestion}
+          </div>
+        </div>
+      )}
+
+      {/* Footnotes Management Drawer */}
+      {showFootnotesDrawer && (
+        <div className="border-b border-stone-800 bg-stone-950/95 p-4 shrink-0 animate-fade-in text-xs max-h-56 overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-violet-400" />
+              <h4 className="font-semibold text-stone-200">
+                Chapter Footnotes ({chapter.footnotes?.length || 0})
+              </h4>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAddFootnote}
+                className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add Note</span>
+              </button>
+              <button
+                onClick={() => setShowFootnotesDrawer(false)}
+                className="text-stone-500 hover:text-stone-300"
+              >
+                &times; Close
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {(chapter.footnotes || []).map((fn) => (
+              <div key={fn.id} className="flex items-start gap-2 bg-stone-900 p-2 rounded-lg border border-stone-800">
+                <span className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 font-bold text-center text-[10px] leading-5 shrink-0">
+                  {fn.number}
+                </span>
+                <textarea
+                  rows={2}
+                  value={fn.text}
+                  onChange={(e) => handleUpdateFootnote(fn.id, e.target.value)}
+                  placeholder="Enter footnote / citation text here (renders in EPUB 3 popup and bottom-of-page print)..."
+                  className="flex-1 bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-amber-500 resize-none"
+                />
+                <button
+                  onClick={() => handleDeleteFootnote(fn.id)}
+                  className="p-1 text-stone-500 hover:text-rose-400 rounded transition-colors"
+                  title="Delete Footnote"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Main Writing Canvas */}
+      <div className="flex-1 overflow-y-auto px-6 py-8 flex justify-center">
+        <div
+          className={`w-full max-w-2xl flex flex-col transition-all ${
+            focusMode ? 'max-w-3xl font-serif' : ''
+          }`}
+        >
+          {isPartDivider ? (
+            /* Dedicated Full-Page Part Divider Canvas (Phase 2) */
+            <div className="p-8 rounded-2xl bg-stone-950/60 border border-stone-800/80 my-auto text-center space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold uppercase tracking-widest">
+                <Bookmark className="w-3.5 h-3.5" />
+                <span>Multi-Volume / Part Divider</span>
+              </div>
+
+              <div className="flex items-center justify-center gap-3">
+                <label className="text-xs text-stone-400 font-medium uppercase tracking-wider">Part Number:</label>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5, 6].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handlePartNumberChange(num)}
+                      className={`w-8 h-8 rounded-lg text-xs font-serif font-bold transition-all ${
+                        partNumber === num
+                          ? 'bg-amber-500 text-stone-950 shadow-md scale-105'
+                          : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
+                      }`}
+                    >
+                      {toRoman(num)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1">Part Title</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  placeholder="e.g. The Brass Meridian"
+                  className="w-full text-center text-2xl font-serif font-bold bg-transparent border-b border-stone-800 focus:border-amber-500 pb-2 text-stone-100 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1">
+                  Optional Subtitle or Act Theme
+                </label>
+                <input
+                  type="text"
+                  value={subtitle}
+                  onChange={(e) => handleSubtitleChange(e.target.value)}
+                  placeholder="e.g. In which the sky fractures and ancient covenants unravel"
+                  className="w-full text-center text-sm italic font-serif bg-transparent border-b border-stone-800 focus:border-amber-500 pb-1 text-stone-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="py-2 text-2xl text-stone-600 font-serif">❦  •  ❦</div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1">
+                  Divider Epigraph / Foreword Note (Optional)
+                </label>
+                <textarea
+                  rows={4}
+                  value={content}
+                  onChange={(e) => handleContentChange(e.target.value)}
+                  placeholder="&quot;To measure the meridian is not to tame the star...&quot; — Ancient Navigators’ Codex"
+                  className="w-full text-center text-xs italic font-serif bg-stone-900/60 border border-stone-800 rounded-xl p-3 text-stone-300 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="text-[11px] text-stone-500 italic">
+                Renders as a dedicated, standalone full page in EPUB, device preview, and print PDF.
+              </div>
+            </div>
+          ) : (
+            /* Standard Chapter Editor Canvas */
+            <>
+              {/* Title & Subtitle Inputs */}
+              <div className="mb-6 space-y-2">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  placeholder="Chapter Title..."
+                  className={`w-full bg-transparent font-serif font-bold text-2xl lg:text-3xl text-stone-100 placeholder-stone-600 focus:outline-none border-b pb-2 ${
+                    focusMode ? 'border-stone-800' : 'border-stone-800 focus:border-amber-500'
+                  }`}
+                />
+                <input
+                  type="text"
+                  value={subtitle}
+                  onChange={(e) => handleSubtitleChange(e.target.value)}
+                  placeholder="Optional Chapter Subtitle / Date / Location..."
+                  className="w-full bg-transparent font-serif italic text-xs lg:text-sm text-stone-400 placeholder-stone-700 focus:outline-none border-b border-transparent focus:border-stone-800 pb-1"
+                />
+              </div>
+
+              {/* Prose Writing Area */}
+              <textarea
+                value={content}
+                onChange={(e) => handleContentChange(e.target.value)}
+                placeholder="Begin your story here... Use standard paragraphs and markdown headings (#) or HTML tags."
+                className={`w-full flex-1 min-h-[500px] bg-transparent resize-none focus:outline-none leading-relaxed transition-all ${
+                  focusMode
+                    ? 'text-lg text-[#d8d2c8] leading-[1.8] font-serif'
+                    : 'text-sm text-stone-200 leading-[1.7] font-serif'
+                }`}
+                style={{
+                  fontFamily: styleConfig.bodyFont || 'Georgia, serif',
+                }}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
+
+function countWords(str: string): number {
+  if (!str) return 0;
+  // Strip tags
+  const clean = str.replace(/<[^>]+>/g, ' ');
+  return clean.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function countSyllables(word: string): number {
+  let w = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (w.length <= 3) return 1;
+  w = w.replace(/(?:[^laeiouy]|ed|es|e)$/, '');
+  w = w.replace(/^y/, '');
+  const matches = w.match(/[aeiouy]{1,2}/g);
+  return matches ? matches.length : 1;
+}
+
+function computeReadability(text: string) {
+  const clean = text.replace(/<[^>]+>/g, ' ').trim();
+  if (!clean) {
+    return {
+      gradeLevel: '0.0',
+      gradeCategory: 'No prose',
+      readingEase: 100,
+      easeCategory: 'Very Easy',
+      avgWordsPerSentence: '0.0',
+      complexWordsPercentage: 0,
+      suggestion: 'Begin writing to see real-time readability feedback.',
+    };
+  }
+
+  const sentences = clean.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  const words = clean.split(/\s+/).filter((w) => w.length > 0);
+
+  const numSentences = Math.max(1, sentences.length);
+  const numWords = Math.max(1, words.length);
+
+  let totalSyllables = 0;
+  let complexWords = 0;
+
+  words.forEach((w) => {
+    const syl = countSyllables(w);
+    totalSyllables += syl;
+    if (syl >= 3) complexWords++;
+  });
+
+  // Flesch Reading Ease: 206.835 - 1.015 * (words / sentences) - 84.6 * (syllables / words)
+  const ease = 206.835 - 1.015 * (numWords / numSentences) - 84.6 * (totalSyllables / numWords);
+  const clampedEase = Math.round(Math.max(0, Math.min(100, ease)));
+
+  // Flesch-Kincaid Grade Level: 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59
+  const grade = 0.39 * (numWords / numSentences) + 11.8 * (totalSyllables / numWords) - 15.59;
+  const clampedGrade = Math.max(1, Math.round(grade * 10) / 10);
+
+  let gradeCat = 'Middle School';
+  if (clampedGrade <= 6) gradeCat = 'Accessible / YA';
+  else if (clampedGrade <= 9) gradeCat = 'Popular Fiction (Best Seller)';
+  else if (clampedGrade <= 12) gradeCat = 'Literary / High School';
+  else gradeCat = 'Academic / Complex';
+
+  let easeCat = 'Standard';
+  if (clampedEase >= 80) easeCat = 'Very Easy';
+  else if (clampedEase >= 60) easeCat = 'Standard / Engaging';
+  else if (clampedEase >= 40) easeCat = 'Challenging';
+  else easeCat = 'Dense / Scholarly';
+
+  let suggestion = 'Pacing is balanced and flowing naturally.';
+  if (clampedGrade > 11) {
+    suggestion = 'Sentences are fairly long and complex. Consider varying sentence length to create dramatic tension in action scenes.';
+  } else if (clampedGrade < 5) {
+    suggestion = 'Sentences are punchy and concise. Great for fast-paced thrillers or middle-grade prose.';
+  }
+
+  return {
+    gradeLevel: clampedGrade.toFixed(1),
+    gradeCategory: gradeCat,
+    readingEase: clampedEase,
+    easeCategory: easeCat,
+    avgWordsPerSentence: (numWords / numSentences).toFixed(1),
+    complexWordsPercentage: Math.round((complexWords / numWords) * 100),
+    suggestion,
+  };
+}
+
+function toRoman(num: number): string {
+  const lookup: { [key: string]: number } = {
+    M: 1000,
+    CM: 900,
+    D: 500,
+    CD: 400,
+    C: 100,
+    XC: 90,
+    L: 50,
+    XL: 40,
+    X: 10,
+    IX: 9,
+    V: 5,
+    IV: 4,
+    I: 1,
+  };
+  let roman = '';
+  for (const i in lookup) {
+    while (num >= lookup[i]) {
+      roman += i;
+      num -= lookup[i];
+    }
+  }
+  return roman || `${num}`;
+}

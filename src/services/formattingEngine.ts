@@ -53,10 +53,9 @@ export function formatChapterHtml(
     // Remove old drop cap wrappers if re-formatting
     const oldDropCap = firstP.querySelector('.drop-cap-letter');
     if (oldDropCap && oldDropCap.textContent) {
-      // already processed, skip reprocessing to avoid double wrapping
+      // already processed, skip reprocessing
     } else if (style.firstParagraphDropCap && style.dropCap !== 'none') {
       const text = firstP.innerHTML.trim();
-      // Match first letter (skipping leading tags or quotes)
       const match = text.match(/^([^a-zA-Z0-9]*)([a-zA-Z0-9])(.*)$/s);
       if (match) {
         const [, prefix, letter, rest] = match;
@@ -67,12 +66,10 @@ export function formatChapterHtml(
         } else if (style.dropCap === 'raised') {
           dropCapClass += ' text-4xl text-neutral-900 dark:text-neutral-100 align-top';
         } else {
-          // simple 3-line drop cap
           dropCapClass += ' text-5xl text-neutral-900 dark:text-neutral-100';
         }
 
         let formattedRest = rest;
-        // Optionally apply small-caps to first 3-5 words
         if (style.firstParagraphSmallCaps) {
           const words = rest.split(/\s+/);
           const smallCapWords = words.slice(0, 4).join(' ');
@@ -94,3 +91,5 @@ export function formatChapterHtml(
 
   return container.innerHTML;
 }
+
+export const formatChapterContentHtml = formatChapterHtml;

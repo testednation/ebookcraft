@@ -99,6 +99,8 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ];
 
+export const GENRE_THEMES = THEME_PRESETS;
+
 export const getDefaultStyleConfig = (themeId: GenreThemeId = 'literary'): StyleConfig => {
   const preset = THEME_PRESETS.find((p) => p.id === themeId) || THEME_PRESETS[0];
   return {

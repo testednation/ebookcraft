@@ -1,42 +1,83 @@
-import { Book, Chapter } from '../types/book';
+import { Book, Chapter, TrimSize } from '../types/book';
 import { formatChapterHtml } from './formattingEngine';
 import { getDefaultStyleConfig } from './themes';
 
-export function openPrintDialog(book: Book, chapters: Chapter[]): void {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('Please allow popups to open the print preview.');
-    return;
-  }
-
+export function compilePrintReadyHtml(book: Book, chapters: Chapter[]): string {
   const style = {
     ...getDefaultStyleConfig('literary'),
-    ...(book.styleConfig || {}),
+    ...(book?.styleConfig || {}),
   };
-  const trimDimensions = {
+
+  const trimDimensions: Record<string, string> = {
     '5x8': '5in 8in',
+    '5.25x8': '5.25in 8in',
     '5.5x8.5': '5.5in 8.5in',
     '6x9': '6in 9in',
-  }[style.trimSize || '5.5x8.5'];
+    '6.14x9.21': '6.14in 9.21in',
+    '7x10': '7in 10in',
+    '8.5x11': '8.5in 11in',
+  };
+  const chosenTrim = trimDimensions[style.trimSize as string] || '5.5in 8.5in';
+
+  // Dynamic KDP/Ingram gutter based on estimated page count
+  const totalWords = chapters.reduce((s, c) => s + (c.wordCount || 0), 0);
+  const estimatedPages = Math.ceil(totalWords / 280) + 8;
+  let gutterMargin = '0.375in';
+  if (estimatedPages >= 501) gutterMargin = '0.75in';
+  else if (estimatedPages >= 301) gutterMargin = '0.625in';
+  else if (estimatedPages >= 151) gutterMargin = '0.5in';
 
   const formattedChaptersHtml = chapters
     .map((ch, idx) => {
+      // Part Divider Full Page
+      if (ch.type === 'part') {
+        return `
+          <article class="print-chapter print-part-page break-right" id="chapter-${idx}">
+            <div class="part-page-inner">
+              <h1 class="part-page-title">${ch.title}</h1>
+              ${ch.subtitle ? `<h2 class="part-page-subtitle">${ch.subtitle}</h2>` : ''}
+              <div class="folio-scene-break" style="margin-top: 1in;">❖ &nbsp; ❖ &nbsp; ❖</div>
+              ${ch.content ? `<div class="part-page-epigraph">${ch.content}</div>` : ''}
+            </div>
+          </article>
+        `;
+      }
+
       const formattedContent = formatChapterHtml(ch.content, style, ch.customOrnamentId);
+
+      let footnotesHtml = '';
+      if (ch.footnotes && ch.footnotes.length > 0) {
+        const rows = ch.footnotes
+          .map(
+            (fn) => `
+          <div class="print-footnote-row">
+            <strong>[${fn.number}]</strong> ${fn.text}
+          </div>
+        `
+          )
+          .join('\n');
+        footnotesHtml = `<footer class="print-footnotes-section"><div style="font-weight: bold; margin-bottom: 4pt; text-transform: uppercase; letter-spacing: 0.05em;">Notes</div>${rows}</footer>`;
+      }
+
+      const breakClass = style.rectoChapterOpening ? 'break-right' : (ch.pageBreakBefore ? 'break-before' : '');
+
       return `
-        <article class="print-chapter ${ch.pageBreakBefore ? 'break-before' : ''}" id="chapter-${idx}">
+        <article class="print-chapter ${breakClass}" id="chapter-${idx}">
           <header class="chapter-header">
+            ${ch.headerImage ? `<div class="chapter-header-image" style="margin-bottom: 18pt; text-align: center;"><img src="${ch.headerImage}" alt="" style="max-height: 1.5in; max-width: 80%; border-radius: 4px;" /></div>` : ''}
             <h1 class="chapter-title">${ch.title}</h1>
             ${ch.subtitle ? `<h2 class="chapter-subtitle">${ch.subtitle}</h2>` : ''}
           </header>
           <div class="chapter-body">
             ${formattedContent}
           </div>
+          ${footnotesHtml}
         </article>
       `;
     })
     .join('\n');
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -46,11 +87,11 @@ export function openPrintDialog(book: Book, chapters: Chapter[]): void {
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;600&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <style>
     @page {
-      size: ${trimDimensions};
+      size: ${chosenTrim};
       margin-top: 0.75in;
       margin-bottom: 0.75in;
-      margin-left: 0.75in;
-      margin-right: 0.625in;
+      margin-left: ${gutterMargin}; /* Inside Gutter margin */
+      margin-right: 0.625in;        /* Outside margin */
       @bottom-center {
         content: counter(page);
         font-family: "${style.bodyFont}", serif;
@@ -58,8 +99,8 @@ export function openPrintDialog(book: Book, chapters: Chapter[]): void {
       }
     }
     @page :left {
-      margin-left: 0.625in;
-      margin-right: 0.75in;
+      margin-left: 0.625in;        /* Outside margin for verso */
+      margin-right: ${gutterMargin}; /* Inside gutter margin for verso */
     }
     body {
       font-family: "${style.bodyFont}", Georgia, serif;
@@ -74,6 +115,37 @@ export function openPrintDialog(book: Book, chapters: Chapter[]): void {
     .print-chapter {
       page-break-before: always;
       break-before: page;
+    }
+    .break-right {
+      page-break-before: right !important;
+      break-before: right !important;
+    }
+    .print-part-page {
+      page-break-before: always;
+      break-before: page;
+      text-align: center;
+      padding-top: 2.5in;
+      min-height: 70vh;
+    }
+    .part-page-title {
+      font-family: "${style.headingFont}", Georgia, serif;
+      font-size: 2.2em;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin: 0 0 0.3in 0;
+    }
+    .part-page-subtitle {
+      font-family: "${style.bodyFont}", Georgia, serif;
+      font-style: italic;
+      font-size: 1.25em;
+      color: #444;
+      margin: 0;
+    }
+    .part-page-epigraph {
+      margin-top: 0.8in;
+      font-style: italic;
+      color: #555;
+      font-size: 0.95em;
     }
     .chapter-header {
       text-align: center;
@@ -126,6 +198,17 @@ export function openPrintDialog(book: Book, chapters: Chapter[]): void {
       margin: 0;
       padding: 0;
     }
+    .print-footnotes-section {
+      margin-top: 0.6in;
+      padding-top: 0.25in;
+      border-top: 0.5pt solid #888;
+      font-size: 8.5pt;
+      line-height: 1.35;
+      color: #333;
+    }
+    .print-footnote-row {
+      margin-bottom: 5pt;
+    }
     .no-print-toolbar {
       position: fixed;
       top: 12px;
@@ -166,7 +249,16 @@ export function openPrintDialog(book: Book, chapters: Chapter[]): void {
   ${formattedChaptersHtml}
 </body>
 </html>`;
+}
 
+export function openPrintDialog(book: Book, chapters: Chapter[]): void {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Please allow popups to open the print preview.');
+    return;
+  }
+
+  const html = compilePrintReadyHtml(book, chapters);
   printWindow.document.write(html);
   printWindow.document.close();
 }

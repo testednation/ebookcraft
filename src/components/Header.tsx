@@ -1,150 +1,193 @@
 import React from 'react';
-import {
-  BookOpen,
-  Sliders,
-  Settings,
-  Download,
-  Eye,
-  EyeOff,
-  Check,
-  Loader2,
-  HardDrive,
-  Keyboard,
-} from 'lucide-react';
 import { Book } from '../types/book';
+import {
+  Feather,
+  Sliders,
+  BookOpen,
+  Download,
+  Keyboard,
+  Sparkles,
+  Maximize2,
+  Minimize2,
+  Check,
+  RefreshCw,
+  Users,
+  Layers,
+  ShieldCheck,
+} from 'lucide-react';
 
 interface HeaderProps {
   book: Book;
-  saveStatus: 'saved' | 'saving' | 'unsaved';
-  isPreviewOpen: boolean;
-  onTogglePreview: () => void;
+  totalWords: number;
+  chapterCount: number;
+  isSaving: boolean;
+  lastSavedAt: number | null;
+  focusMode: boolean;
+  onToggleFocusMode: () => void;
+  onOpenBookDetails: () => void;
   onOpenStyleModal: () => void;
-  onOpenBookDetailsModal: () => void;
   onOpenExportModal: () => void;
-  onSaveManual: () => void;
-  totalWordCount: number;
+  onOpenShortcuts: () => void;
+  onOpenRoadmap: () => void;
+  onOpenCharacters: () => void;
+  onOpenCoverWrap: () => void;
+  onOpenPreflight: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   book,
-  saveStatus,
-  isPreviewOpen,
-  onTogglePreview,
+  totalWords,
+  chapterCount,
+  isSaving,
+  lastSavedAt,
+  focusMode,
+  onToggleFocusMode,
+  onOpenBookDetails,
   onOpenStyleModal,
-  onOpenBookDetailsModal,
   onOpenExportModal,
-  onSaveManual,
-  totalWordCount,
+  onOpenShortcuts,
+  onOpenRoadmap,
+  onOpenCharacters,
+  onOpenCoverWrap,
+  onOpenPreflight,
 }) => {
   return (
-    <header className="h-14 border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-4 flex items-center justify-between select-none z-30">
-      {/* Brand & Book Title */}
+    <header className="h-14 border-b border-stone-800 bg-stone-950 px-4 flex items-center justify-between shrink-0 select-none z-20">
+      {/* Left: Branding & Manuscript Title */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-amber-400 font-serif font-bold text-lg tracking-wide">
-          <BookOpen className="w-5 h-5 text-amber-500" />
-          <span className="hidden sm:inline">FolioCraft</span>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-stone-950 shadow-md">
+            <Feather className="w-4 h-4 stroke-[2.5]" />
+          </div>
+          <div className="hidden sm:block">
+            <div className="flex items-center gap-1.5">
+              <span className="font-serif font-bold text-sm tracking-wide text-stone-100">FolioCraft</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700/60">
+                v2.1
+              </span>
+            </div>
+            <p className="text-[10px] text-stone-500 font-sans -mt-0.5">Author Studio</p>
+          </div>
         </div>
 
-        <span className="text-neutral-600 hidden sm:inline">/</span>
+        <div className="h-4 w-px bg-stone-800 hidden md:block" />
 
+        {/* Current Book Info */}
         <button
-          onClick={onOpenBookDetailsModal}
-          className="flex items-center gap-2 group px-2 py-1 rounded hover:bg-neutral-800 transition text-left"
-          title="Click to edit book metadata"
+          onClick={onOpenBookDetails}
+          className="text-left px-2 py-1 rounded-lg hover:bg-stone-900 transition-colors group flex items-center gap-2 max-w-[240px] lg:max-w-xs truncate"
+          title="Click to edit Book Details & Goals"
         >
-          <span className="text-sm font-semibold text-neutral-200 group-hover:text-amber-300 truncate max-w-[180px] md:max-w-xs">
-            {book.title || 'Untitled Book'}
-          </span>
-          <span className="text-xs text-neutral-500 hidden md:inline truncate max-w-[120px]">
-            by {book.author || 'Author'}
-          </span>
+          <div className="truncate">
+            <div className="text-xs font-serif font-semibold text-stone-200 group-hover:text-amber-400 transition-colors truncate">
+              {book.title || 'Untitled Book'}
+            </div>
+            <div className="text-[10px] text-stone-500 truncate">
+              by {book.author || 'Anonymous'} &bull; {totalWords.toLocaleString()} words
+            </div>
+          </div>
         </button>
       </div>
 
-      {/* Persistence & Word Count Status */}
-      <div className="flex items-center gap-4 text-xs">
-        {/* Word Count & Book Target */}
-        <div className="hidden lg:flex items-center gap-1.5 text-neutral-400">
-          <span className="font-medium text-neutral-300">{totalWordCount.toLocaleString()}</span>
-          <span className="text-neutral-600">/</span>
-          <span className="font-mono text-neutral-500">{(book.targetWordCount || 60000).toLocaleString()} words</span>
-          <span className="text-[10px] px-1.5 py-0.2 bg-neutral-800 text-amber-400/90 rounded font-mono">
-            {Math.min(100, Math.round((totalWordCount / (book.targetWordCount || 60000)) * 100))}%
-          </span>
-          <span className="text-neutral-600">&bull;</span>
-          <span>~{Math.ceil(totalWordCount / 250)} pages</span>
-        </div>
-
-        {/* Offline & Save Status Indicator */}
+      {/* Center: Save Status & Phase 2 Roadmap Badge */}
+      <div className="hidden md:flex items-center gap-3">
         <button
-          onClick={onSaveManual}
-          className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-800 transition"
-          title="Click to manually save (Ctrl+S)"
+          onClick={onOpenRoadmap}
+          className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition-all shadow-sm"
+          title="Atticus & Vellum Parity Roadmap"
         >
-          {saveStatus === 'saving' ? (
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+          <span>Parity Roadmap</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300">
+            Phase 3
+          </span>
+        </button>
+
+        {/* Auto-Save Indicator */}
+        <div className="flex items-center gap-1.5 text-[11px] text-stone-500">
+          {isSaving ? (
             <>
-              <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-              <span className="text-amber-300 font-medium text-xs">Saving...</span>
-            </>
-          ) : saveStatus === 'saved' ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-neutral-400 text-xs">Saved</span>
+              <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
+              <span className="text-stone-400">Saving...</span>
             </>
           ) : (
             <>
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-amber-400 text-xs font-medium">Unsaved</span>
+              <Check className="w-3 h-3 text-emerald-400" />
+              <span>{lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}</span>
             </>
           )}
-
-          <span className="hidden xl:inline-flex items-center gap-1 ml-1 text-[10px] text-neutral-500 bg-neutral-800/80 px-1.5 py-0.5 rounded border border-neutral-700/50">
-            <HardDrive className="w-2.5 h-2.5 text-emerald-500" />
-            Offline DB
-          </span>
-        </button>
+        </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-2">
-        {/* Style & Theme Modal */}
+      {/* Right: Actions & Tools */}
+      <div className="flex items-center gap-1.5">
+        {/* Full Cover Wrap & Spine (Phase 3) */}
+        <button
+          onClick={onOpenCoverWrap}
+          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Full Cover Wrap & Spine Calculator (Phase 3)"
+        >
+          <Layers className="w-4 h-4 text-amber-400" />
+          <span className="hidden xl:inline text-xs">Cover Wrap</span>
+        </button>
+
+        {/* Pre-Flight Inspection (Phase 3) */}
+        <button
+          onClick={onOpenPreflight}
+          className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Pre-Flight Print Proof Inspection (Phase 3)"
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span className="hidden xl:inline text-xs">Pre-Flight</span>
+        </button>
+
+        {/* Characters Bible Drawer button */}
+        <button
+          onClick={onOpenCharacters}
+          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Characters Bible & Cast"
+        >
+          <Users className="w-4 h-4" />
+          <span className="hidden lg:inline text-xs">Characters</span>
+        </button>
+
+        {/* Focus Mode Toggle */}
+        <button
+          onClick={onToggleFocusMode}
+          className={`p-2 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
+            focusMode
+              ? 'bg-amber-500 text-stone-950 font-semibold'
+              : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
+          }`}
+          title="Focus Mode (Distraction-Free Typewriter)"
+        >
+          {focusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          <span className="hidden lg:inline text-xs">{focusMode ? 'Exit Focus' : 'Focus'}</span>
+        </button>
+
+        {/* Styling Modal */}
         <button
           onClick={onOpenStyleModal}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-md transition"
-          title="Customize Theme, Fonts, Drop Caps & Ornaments"
+          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Styling & Typography"
         >
-          <Sliders className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">Styles</span>
+          <Sliders className="w-4 h-4" />
+          <span className="hidden xl:inline text-xs">Styling</span>
         </button>
 
-        {/* Metadata Modal */}
+        {/* Keyboard Shortcuts */}
         <button
-          onClick={onOpenBookDetailsModal}
-          className="p-1.5 text-xs text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-md transition"
-          title="Book Details & Auto-Save Settings"
+          onClick={onOpenShortcuts}
+          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors"
+          title="Keyboard Shortcuts (Ctrl+K)"
         >
-          <Settings className="w-3.5 h-3.5" />
+          <Keyboard className="w-4 h-4" />
         </button>
 
-        {/* Toggle Device Preview */}
-        <button
-          onClick={onTogglePreview}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition ${
-            isPreviewOpen
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-              : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
-          }`}
-          title="Toggle Device Preview (Ctrl+P)"
-        >
-          {isPreviewOpen ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          <span className="hidden md:inline">Preview</span>
-          <span className="hidden lg:inline text-[10px] text-neutral-500 font-mono">⌘P</span>
-        </button>
-
-        {/* Export & Publish Button */}
+        {/* Export Button */}
         <button
           onClick={onOpenExportModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-md shadow-sm transition"
+          className="ml-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-stone-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
         >
           <Download className="w-3.5 h-3.5" />
           <span>Export</span>

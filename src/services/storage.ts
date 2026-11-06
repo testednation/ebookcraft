@@ -74,7 +74,6 @@ export async function deleteBook(id: string): Promise<void> {
     const tx = db.transaction(['books', 'chapters', 'characters'], 'readwrite');
     tx.objectStore('books').delete(id);
 
-    // Delete chapters
     const chStore = tx.objectStore('chapters');
     const chIndex = chStore.index('bookId');
     const chReq = chIndex.getAllKeys(id);
@@ -82,7 +81,6 @@ export async function deleteBook(id: string): Promise<void> {
       chReq.result.forEach((key) => chStore.delete(key));
     };
 
-    // Delete characters
     const charStore = tx.objectStore('characters');
     const charIndex = charStore.index('bookId');
     const charReq = charIndex.getAllKeys(id);
@@ -224,6 +222,10 @@ export async function importFullBackupJSON(jsonStr: string): Promise<{ book: Boo
 
   const book: Book = {
     ...data.book,
+    styleConfig: {
+      ...getDefaultStyleConfig('literary'),
+      ...(data.book.styleConfig || {}),
+    },
     updatedAt: Date.now(),
   };
 
@@ -355,6 +357,22 @@ export async function seedInitialDemoIfEmpty(): Promise<{ book: Book; chapters: 
       content: `<p class="italic text-neutral-500">Table of Contents will automatically populate in publication exports.</p>`,
     },
     {
+      id: 'ch-part-1',
+      bookId: demoBookId,
+      title: 'Part I',
+      subtitle: 'The Brass Meridian',
+      number: 1,
+      partNumber: 1,
+      type: 'part',
+      group: 'body',
+      order: 4,
+      wordCount: 5,
+      targetWordCount: 5,
+      includeInToc: true,
+      pageBreakBefore: true,
+      content: `<p class="text-center italic text-neutral-400">"When the pendulums pause, the horizon remembers its ancient curvature."</p>`,
+    },
+    {
       id: 'ch-prologue',
       bookId: demoBookId,
       title: 'Prologue',
@@ -362,14 +380,21 @@ export async function seedInitialDemoIfEmpty(): Promise<{ book: Book; chapters: 
       number: undefined,
       type: 'prologue',
       group: 'body',
-      order: 4,
+      order: 5,
       wordCount: 220,
       targetWordCount: 1500,
       includeInToc: true,
       pageBreakBefore: true,
+      footnotes: [
+        {
+          id: 'fn-1',
+          number: 1,
+          text: 'The Great Meridian was calibrated in 1842 using celestial refraction angles recorded by the Edinburgh Astronomical Guild.',
+        },
+      ],
       content: `
         <p>The dawn broke over the Brass Archipelago not with birdsong, but with the steady, synchronized ticking of eleven thousand suspended pendulum towers. Through the sulfur mist, the Great Meridian rotated upon immense jade bearings, whispering forgotten equations to the empty sky.</p>
-        <p>High above the harbor docks, Nicholas Drake adjusted the brass aperture of his ocular lens. The atmospheric barometer was plunging faster than a punctured gasbag. Something colossal was disturbing the ionosphere, carving trenches of ozone through clouds that had known only wind for centuries.</p>
+        <p>High above the harbor docks, Nicholas Drake adjusted the brass aperture of his ocular lens. The atmospheric barometer was plunging faster than a punctured gasbag. Something colossal was disturbing the ionosphere, carving trenches of ozone through clouds that had known only wind for centuries.<sup class="text-amber-400 font-mono font-bold">[1]</sup></p>
         <hr />
         <p>He folded the copper quadrant into his canvas waistcoat and stepped to the edge of the iron gantry. The air smelled of burnt camphor and ozone. Far below, the bells of St. Jude's Basilica began to chime, but their intervals were wrong—fractions of a second late, as if time itself had grown viscous and resistant.</p>
       `,
@@ -382,14 +407,21 @@ export async function seedInitialDemoIfEmpty(): Promise<{ book: Book; chapters: 
       number: 1,
       type: 'chapter',
       group: 'body',
-      order: 5,
+      order: 6,
       wordCount: 380,
       targetWordCount: 3000,
       includeInToc: true,
       pageBreakBefore: true,
+      footnotes: [
+        {
+          id: 'fn-2',
+          number: 1,
+          text: 'Vellum charts of the Cerulean Gulf require monthly baths in diluted tea oil to stave off brine rot.',
+        },
+      ],
       content: `
         <p>No one ever explained to the apprentices of the Admiralty Why the horizon curved upward at the rim of the world. It was simply accepted as one accepts the weight of copper coins or the bite of winter brine.</p>
-        <p>Master Julian sat hunched over the drafting table, his calloused thumbs smoothing the vellum charts of the Cerulean Gulf. Across the bay, the leviathan boilers of the Iron Citadel exhaled plumes of pearlescent steam that drifted lazily toward the moon.</p>
+        <p>Master Julian sat hunched over the drafting table, his calloused thumbs smoothing the vellum charts of the Cerulean Gulf.<sup class="text-amber-400 font-mono font-bold">[1]</sup> Across the bay, the leviathan boilers of the Iron Citadel exhaled plumes of pearlescent steam that drifted lazily toward the moon.</p>
         <p>"You doubt the reading, Nicholas," the old cartographer murmured without raising his eyes from the ink compass. "You believe the chronometer has succumbed to salt damp."</p>
         <p>"The variance is thirty-seven arc-seconds, sir," Nicholas replied, resting his gloved hands upon the cedar balustrade. "Salt damp can rust an escapement spring, but it cannot bend the alignment of Polaris."</p>
         <hr />
@@ -403,7 +435,7 @@ export async function seedInitialDemoIfEmpty(): Promise<{ book: Book; chapters: 
       title: 'About the Author',
       type: 'about-author',
       group: 'back-matter',
-      order: 6,
+      order: 7,
       wordCount: 110,
       includeInToc: true,
       pageBreakBefore: true,

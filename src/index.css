@@ -18,7 +18,7 @@
   }
 }
 
-/* Custom scrollbars for professional desktop studio */
+/* Custom scrollbars for desktop publishing studio */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -34,19 +34,16 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Page Break marker for editor */
 .folio-page-break {
   position: relative;
   user-select: none;
 }
 
-/* Drop caps */
 .has-dropcap .drop-cap-letter {
   margin-right: 0.2em;
   margin-top: -0.05em;
 }
 
-/* Device screen simulation */
 .device-shadow-kindle {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }

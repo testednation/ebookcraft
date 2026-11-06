@@ -1,275 +1,303 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Sparkles, Check } from 'lucide-react';
+import React, { useState } from 'react';
 import { CharacterProfile, CharacterRole } from '../types/book';
+import { X, Plus, Trash2, Edit3, User, Sparkles, BookOpen } from 'lucide-react';
 
 interface CharacterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  character: CharacterProfile | null;
+  characters: CharacterProfile[];
+  onSaveCharacter: (character: CharacterProfile) => void;
+  onDeleteCharacter: (characterId: string) => void;
   bookId: string;
-  onSave: (character: CharacterProfile) => void;
 }
 
-const COLOR_OPTIONS = [
-  { label: 'Amber', value: '#f59e0b', ring: 'ring-amber-500' },
-  { label: 'Emerald', value: '#10b981', ring: 'ring-emerald-500' },
-  { label: 'Blue', value: '#3b82f6', ring: 'ring-blue-500' },
-  { label: 'Indigo', value: '#6366f1', ring: 'ring-indigo-500' },
-  { label: 'Purple', value: '#a855f7', ring: 'ring-purple-500' },
-  { label: 'Rose', value: '#f43f5e', ring: 'ring-rose-500' },
-  { label: 'Crimson', value: '#e11d48', ring: 'ring-rose-600' },
-  { label: 'Teal', value: '#14b8a6', ring: 'ring-teal-500' },
-  { label: 'Slate', value: '#64748b', ring: 'ring-slate-500' },
-];
+const ROLE_COLORS: Record<CharacterRole, { bg: string; text: string; border: string; label: string }> = {
+  protagonist: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/30', label: 'Protagonist' },
+  antagonist: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/30', label: 'Antagonist' },
+  supporting: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/30', label: 'Supporting' },
+  minor: { bg: 'bg-stone-500/10', text: 'text-stone-400', border: 'border-stone-500/30', label: 'Minor Character' },
+};
 
 export const CharacterModal: React.FC<CharacterModalProps> = ({
   isOpen,
   onClose,
-  character,
+  characters,
+  onSaveCharacter,
+  onDeleteCharacter,
   bookId,
-  onSave,
 }) => {
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<CharacterRole>('supporting');
-  const [aliases, setAliases] = useState('');
-  const [age, setAge] = useState('');
-  const [occupation, setOccupation] = useState('');
-  const [physicalTraits, setPhysicalTraits] = useState('');
-  const [bio, setBio] = useState('');
-  const [personalityTraits, setPersonalityTraits] = useState('');
-  const [notes, setNotes] = useState('');
-  const [color, setColor] = useState('#f59e0b');
-
-  useEffect(() => {
-    if (character) {
-      setName(character.name || '');
-      setRole(character.role || 'supporting');
-      setAliases(character.aliases || '');
-      setAge(character.age || '');
-      setOccupation(character.occupation || '');
-      setPhysicalTraits(character.physicalTraits || '');
-      setBio(character.bio || '');
-      setPersonalityTraits(character.personalityTraits || '');
-      setNotes(character.notes || '');
-      setColor(character.color || '#f59e0b');
-    } else {
-      setName('');
-      setRole('supporting');
-      setAliases('');
-      setAge('');
-      setOccupation('');
-      setPhysicalTraits('');
-      setBio('');
-      setPersonalityTraits('');
-      setNotes('');
-      setColor('#f59e0b');
-    }
-  }, [character, isOpen]);
+  const [editingChar, setEditingChar] = useState<CharacterProfile | null>(null);
+  const [filterRole, setFilterRole] = useState<string>('all');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
-
-    const updated: CharacterProfile = {
-      id: character?.id || `char-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+  const handleStartCreate = () => {
+    const newChar: CharacterProfile = {
+      id: 'char_' + Date.now(),
       bookId,
-      name: trimmedName,
-      role,
-      aliases: aliases.trim() || undefined,
-      age: age.trim() || undefined,
-      occupation: occupation.trim() || undefined,
-      physicalTraits: physicalTraits.trim(),
-      bio: bio.trim(),
-      personalityTraits: personalityTraits.trim() || undefined,
-      notes: notes.trim() || undefined,
-      color,
-      createdAt: character?.createdAt || Date.now(),
+      name: '',
+      role: 'supporting',
+      physicalTraits: '',
+      bio: '',
+      personalityTraits: '',
+      notes: '',
+      createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-
-    onSave(updated);
-    onClose();
+    setEditingChar(newChar);
   };
 
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingChar || !editingChar.name.trim()) return;
+    onSaveCharacter({
+      ...editingChar,
+      updatedAt: Date.now(),
+    });
+    setEditingChar(null);
+  };
+
+  const filteredCharacters = characters.filter((c) =>
+    filterRole === 'all' ? true : c.role === filterRole
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-      <div className="w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-neutral-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-4xl max-h-[85vh] bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-stone-100">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-amber-400" />
-            <h2 className="text-base font-semibold text-white">
-              {character ? 'Edit Character Profile' : 'New Character Profile'}
-            </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/80">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <User className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-serif font-bold text-stone-100">Character Bible &amp; Dossiers</h2>
+              <p className="text-xs text-stone-400">
+                Track traits, backstories, and voice markers to keep your cast consistent across all chapters.
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white rounded"
-            title="Close"
+            className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-800/60 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-          {/* Name & Role */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-neutral-300 font-medium mb-1">
-                Character Name <span className="text-amber-400">*</span>
-              </label>
-              <input
-                type="text"
-                autoFocus
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Nicholas Drake"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1">Narrative Role</label>
+        {/* Body Content */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          {/* Character List Column */}
+          <div className="w-full md:w-80 border-r border-stone-800/80 bg-stone-950/40 flex flex-col">
+            <div className="p-3 border-b border-stone-800/60 flex items-center justify-between gap-2">
               <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as CharacterRole)}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500"
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="bg-stone-800 text-xs text-stone-300 rounded-lg px-2.5 py-1.5 border border-stone-700 focus:outline-none focus:border-amber-500 flex-1"
               >
-                <option value="protagonist">Protagonist</option>
-                <option value="antagonist">Antagonist</option>
+                <option value="all">All Roles ({characters.length})</option>
+                <option value="protagonist">Protagonists</option>
+                <option value="antagonist">Antagonists</option>
                 <option value="supporting">Supporting</option>
-                <option value="minor">Minor / Cameo</option>
+                <option value="minor">Minor</option>
               </select>
+              <button
+                onClick={handleStartCreate}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {filteredCharacters.length === 0 ? (
+                <div className="text-center py-8 px-4 text-stone-500 text-xs">
+                  <User className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  No characters found. Click &quot;New&quot; to build your first character profile.
+                </div>
+              ) : (
+                filteredCharacters.map((c) => {
+                  const roleStyle = ROLE_COLORS[c.role] || ROLE_COLORS.minor;
+                  const isSelected = editingChar?.id === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => setEditingChar(c)}
+                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-stone-800/80 border-amber-500/50 shadow-sm'
+                          : 'bg-stone-900/60 border-stone-800/80 hover:border-stone-700 hover:bg-stone-850'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="font-medium text-xs text-stone-200 truncate">{c.name || 'Untitled'}</span>
+                        <span
+                          className={`text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded border ${roleStyle.bg} ${roleStyle.text} ${roleStyle.border} shrink-0`}
+                        >
+                          {roleStyle.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-400 line-clamp-1 mt-1">{c.physicalTraits || c.bio || 'No details yet'}</p>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* Aliases, Age, Occupation */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-neutral-400 mb-1 font-medium">Aliases / Monikers</label>
-              <input
-                type="text"
-                value={aliases}
-                onChange={(e) => setAliases(e.target.value)}
-                placeholder="e.g. Nick, The Apprentice"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
-              <label className="block text-neutral-400 mb-1 font-medium">Age</label>
-              <input
-                type="text"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                placeholder="e.g. 22 or Mid-40s"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
-              <label className="block text-neutral-400 mb-1 font-medium">Occupation / Title</label>
-              <input
-                type="text"
-                value={occupation}
-                onChange={(e) => setOccupation(e.target.value)}
-                placeholder="e.g. Astrolabe Builder"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
+          {/* Form / Detail Column */}
+          <div className="flex-1 overflow-y-auto p-6 bg-stone-900/40">
+            {editingChar ? (
+              <form onSubmit={handleSave} className="space-y-4 max-w-xl mx-auto">
+                <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                  <h3 className="text-sm font-semibold text-stone-200 flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-amber-400" />
+                    {editingChar.id.startsWith('char_') && !characters.some((c) => c.id === editingChar.id)
+                      ? 'Create Character Profile'
+                      : 'Edit Character Profile'}
+                  </h3>
+                  {characters.some((c) => c.id === editingChar.id) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteCharacter(editingChar.id);
+                        setEditingChar(null);
+                      }}
+                      className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Profile</span>
+                    </button>
+                  )}
+                </div>
 
-          {/* Accent Color Badge */}
-          <div>
-            <label className="block text-neutral-400 mb-1.5 font-medium">Character Accent Color</label>
-            <div className="flex items-center gap-2">
-              {COLOR_OPTIONS.map((c) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-stone-400 mb-1">Character Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingChar.name}
+                      onChange={(e) => setEditingChar({ ...editingChar, name: e.target.value })}
+                      placeholder="e.g. Captain Lyra Vance"
+                      className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-stone-400 mb-1">Story Role</label>
+                    <select
+                      value={editingChar.role}
+                      onChange={(e) =>
+                        setEditingChar({ ...editingChar, role: e.target.value as CharacterRole })
+                      }
+                      className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="protagonist">Protagonist</option>
+                      <option value="antagonist">Antagonist</option>
+                      <option value="supporting">Supporting Character</option>
+                      <option value="minor">Minor Character</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-stone-400 mb-1">Age / Demeanor</label>
+                    <input
+                      type="text"
+                      value={editingChar.age || ''}
+                      onChange={(e) => setEditingChar({ ...editingChar, age: e.target.value })}
+                      placeholder="e.g. 34, brooding, observant"
+                      className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-400 mb-1">Occupation / Title</label>
+                    <input
+                      type="text"
+                      value={editingChar.occupation || ''}
+                      onChange={(e) => setEditingChar({ ...editingChar, occupation: e.target.value })}
+                      placeholder="e.g. Chief Navigator, Arcane Guild"
+                      className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-stone-400 mb-1">
+                    Physical Traits &amp; Visual Anchors
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingChar.physicalTraits}
+                    onChange={(e) => setEditingChar({ ...editingChar, physicalTraits: e.target.value })}
+                    placeholder="e.g. Amber eyes, scar across left cheek, tailored navy coat with silver brass buttons."
+                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-stone-400 mb-1">
+                    Backstory, Motivation &amp; Arc
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editingChar.bio}
+                    onChange={(e) => setEditingChar({ ...editingChar, bio: e.target.value })}
+                    placeholder="e.g. Exiled from the High Citadel after uncovering the clockwork conspiracy. Driven to reclaim her family crest."
+                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-stone-400 mb-1">
+                    Author Notes &amp; Voice Quirks (Secret)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingChar.notes || ''}
+                    onChange={(e) => setEditingChar({ ...editingChar, notes: e.target.value })}
+                    placeholder="e.g. Speaks in short, clipped nautical metaphors. Never mentions her brother until Act III."
+                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingChar(null)}
+                    className="px-4 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 text-xs font-bold transition-colors"
+                  >
+                    Save Character
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-stone-500">
+                <BookOpen className="w-12 h-12 mb-3 text-stone-600" />
+                <h4 className="text-sm font-semibold text-stone-300 mb-1">Select or Create a Character</h4>
+                <p className="text-xs text-stone-500 max-w-sm mb-4">
+                  Keep character details handy so you never mix up eye colors, speech patterns, or character arcs mid-sentence.
+                </p>
                 <button
-                  type="button"
-                  key={c.value}
-                  onClick={() => setColor(c.value)}
-                  className={`w-5 h-5 rounded-full transition-transform ${
-                    color === c.value ? 'scale-125 ring-2 ring-white' : 'opacity-70 hover:opacity-100'
-                  }`}
-                  style={{ backgroundColor: c.value }}
-                  title={c.label}
-                />
-              ))}
-            </div>
+                  onClick={handleStartCreate}
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 text-xs font-bold transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Character Profile</span>
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Physical Traits & Appearance */}
-          <div className="pt-2 border-t border-neutral-800">
-            <label className="block text-neutral-300 mb-1 font-medium">
-              Physical Traits & Appearance
-            </label>
-            <textarea
-              rows={3}
-              value={physicalTraits}
-              onChange={(e) => setPhysicalTraits(e.target.value)}
-              placeholder="Height, build, eye color, hair, facial features, scars, clothing style, distinctive gestures..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500 leading-relaxed placeholder:text-neutral-600"
-            />
-          </div>
-
-          {/* Biography & Backstory */}
-          <div>
-            <label className="block text-neutral-300 mb-1 font-medium">
-              Biography & Backstory
-            </label>
-            <textarea
-              rows={3}
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Origins, history, motivations, core relationships, internal conflicts..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500 leading-relaxed placeholder:text-neutral-600"
-            />
-          </div>
-
-          {/* Personality, Demeanor & Voice */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-neutral-800">
-            <div>
-              <label className="block text-neutral-400 mb-1 font-medium">Personality & Voice</label>
-              <textarea
-                rows={2}
-                value={personalityTraits}
-                onChange={(e) => setPersonalityTraits(e.target.value)}
-                placeholder="Speech quirks, temperament, moral boundaries, habits..."
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500 leading-relaxed placeholder:text-neutral-600"
-              />
-            </div>
-            <div>
-              <label className="block text-neutral-400 mb-1 font-medium">Private Author Notes</label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Secrets, future reveals, character arc notes..."
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-md p-2 text-white focus:outline-none focus:border-amber-500 leading-relaxed placeholder:text-neutral-600"
-              />
-            </div>
-          </div>
-
-          {/* Submit Actions */}
-          <div className="pt-3 border-t border-neutral-800 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs text-neutral-300 hover:text-white bg-neutral-800 rounded-md"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-1.5 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-md transition"
-            >
-              Save Character
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
