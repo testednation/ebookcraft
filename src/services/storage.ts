@@ -1,16 +1,15 @@
-import { BookProject, BookSection } from '../types/book';
-import { createSceneBreakHtml } from './ornaments';
+import { Book, Chapter, CharacterProfile } from '../types/book';
+import { getDefaultStyleConfig } from './themes';
 
 const DB_NAME = 'foliocraft_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-interface FolioDB {
-  books: BookProject;
-  sections: BookSection;
-}
+let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+
+  dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
@@ -18,71 +17,77 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('books')) {
         db.createObjectStore('books', { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains('sections')) {
-        const sectionStore = db.createObjectStore('sections', { keyPath: 'id' });
-        sectionStore.createIndex('bookId', 'bookId', { unique: false });
-        sectionStore.createIndex('order', 'order', { unique: false });
+      if (!db.objectStoreNames.contains('chapters')) {
+        const chapterStore = db.createObjectStore('chapters', { keyPath: 'id' });
+        chapterStore.createIndex('bookId', 'bookId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('characters')) {
+        const characterStore = db.createObjectStore('characters', { keyPath: 'id' });
+        characterStore.createIndex('bookId', 'bookId', { unique: false });
       }
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+
+  return dbPromise;
 }
 
-export function countWords(html: string): number {
-  const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!text) return 0;
-  return text.split(/\s+/).length;
-}
+/* ==================== Books ==================== */
 
-export async function getAllBooks(): Promise<BookProject[]> {
+export async function getBooks(): Promise<Book[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('books', 'readonly');
     const store = tx.objectStore('books');
     const req = store.getAll();
-    req.onsuccess = () => resolve(req.result || []);
+    req.onsuccess = () => {
+      const rawBooks: Book[] = req.result || [];
+      const normalized = rawBooks.map((b) => ({
+        ...b,
+        styleConfig: {
+          ...getDefaultStyleConfig(b.styleConfig?.themeId || 'literary'),
+          ...(b.styleConfig || {}),
+        },
+      }));
+      resolve(normalized);
+    };
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function getBook(id: string): Promise<BookProject | null> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('books', 'readonly');
-    const store = tx.objectStore('books');
-    const req = store.get(id);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-export async function saveBook(book: BookProject): Promise<void> {
+export async function saveBook(book: Book): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('books', 'readwrite');
     const store = tx.objectStore('books');
-    const req = store.put({ ...book, updatedAt: Date.now() });
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    store.put(book);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
 export async function deleteBook(id: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(['books', 'sections'], 'readwrite');
-    const bookStore = tx.objectStore('books');
-    const sectionStore = tx.objectStore('sections');
+    const tx = db.transaction(['books', 'chapters', 'characters'], 'readwrite');
+    tx.objectStore('books').delete(id);
 
-    bookStore.delete(id);
-    const index = sectionStore.index('bookId');
-    const req = index.getAllKeys(id);
-    req.onsuccess = () => {
-      for (const key of req.result) {
-        sectionStore.delete(key);
-      }
+    // Delete chapters
+    const chStore = tx.objectStore('chapters');
+    const chIndex = chStore.index('bookId');
+    const chReq = chIndex.getAllKeys(id);
+    chReq.onsuccess = () => {
+      chReq.result.forEach((key) => chStore.delete(key));
+    };
+
+    // Delete characters
+    const charStore = tx.objectStore('characters');
+    const charIndex = charStore.index('bookId');
+    const charReq = charIndex.getAllKeys(id);
+    charReq.onsuccess = () => {
+      charReq.result.forEach((key) => charStore.delete(key));
     };
 
     tx.oncomplete = () => resolve();
@@ -90,354 +95,379 @@ export async function deleteBook(id: string): Promise<void> {
   });
 }
 
-export async function getSections(bookId: string): Promise<BookSection[]> {
+/* ==================== Chapters ==================== */
+
+export async function getChapters(bookId: string): Promise<Chapter[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('sections', 'readonly');
-    const store = tx.objectStore('sections');
+    const tx = db.transaction('chapters', 'readonly');
+    const store = tx.objectStore('chapters');
     const index = store.index('bookId');
     const req = index.getAll(bookId);
-
     req.onsuccess = () => {
-      const sections = (req.result || []) as BookSection[];
-      sections.sort((a, b) => a.order - b.order);
-      resolve(sections);
+      const chapters: Chapter[] = req.result || [];
+      chapters.sort((a, b) => a.order - b.order);
+      resolve(chapters);
     };
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function saveSection(section: BookSection): Promise<void> {
+export async function saveChapter(chapter: Chapter): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('sections', 'readwrite');
-    const store = tx.objectStore('sections');
-    const req = store.put({
-      ...section,
-      wordCount: countWords(section.content),
-      updatedAt: Date.now(),
-    });
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-export async function saveSections(sections: BookSection[]): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('sections', 'readwrite');
-    const store = tx.objectStore('sections');
-    for (const sec of sections) {
-      store.put({
-        ...sec,
-        wordCount: countWords(sec.content),
-        updatedAt: Date.now(),
-      });
-    }
+    const tx = db.transaction('chapters', 'readwrite');
+    const store = tx.objectStore('chapters');
+    store.put(chapter);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-export async function deleteSection(sectionId: string): Promise<void> {
+export async function saveChapters(chapters: Chapter[]): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('sections', 'readwrite');
-    const store = tx.objectStore('sections');
-    const req = store.delete(sectionId);
-    req.onsuccess = () => resolve();
+    const tx = db.transaction('chapters', 'readwrite');
+    const store = tx.objectStore('chapters');
+    chapters.forEach((ch) => store.put(ch));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteChapter(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('chapters', 'readwrite');
+    const store = tx.objectStore('chapters');
+    store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ==================== Characters ==================== */
+
+export async function getCharacters(bookId: string): Promise<CharacterProfile[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('characters', 'readonly');
+    const store = tx.objectStore('characters');
+    const index = store.index('bookId');
+    const req = index.getAll(bookId);
+    req.onsuccess = () => {
+      const chars: CharacterProfile[] = req.result || [];
+      chars.sort((a, b) => a.name.localeCompare(b.name));
+      resolve(chars);
+    };
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function exportProjectBackup(bookId: string): Promise<string> {
-  const book = await getBook(bookId);
-  const sections = await getSections(bookId);
-  if (!book) throw new Error('Book not found');
-
-  const exportPayload = {
-    version: '1.0',
-    exportDate: new Date().toISOString(),
-    book,
-    sections,
-  };
-
-  return JSON.stringify(exportPayload, null, 2);
+export async function saveCharacter(character: CharacterProfile): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('characters', 'readwrite');
+    const store = tx.objectStore('characters');
+    store.put(character);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
-export async function importProjectBackup(jsonStr: string): Promise<BookProject> {
-  const parsed = JSON.parse(jsonStr);
-  if (!parsed.book || !Array.isArray(parsed.sections)) {
-    throw new Error('Invalid FolioCraft project archive format.');
+export async function saveCharacters(characters: CharacterProfile[]): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('characters', 'readwrite');
+    const store = tx.objectStore('characters');
+    characters.forEach((c) => store.put(c));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteCharacter(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('characters', 'readwrite');
+    const store = tx.objectStore('characters');
+    store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ==================== Backups ==================== */
+
+export async function exportFullBackupJSON(bookId: string): Promise<string> {
+  const books = await getBooks();
+  const book = books.find((b) => b.id === bookId);
+  if (!book) throw new Error('Book not found');
+  const chapters = await getChapters(bookId);
+  const characters = await getCharacters(bookId);
+
+  const payload = {
+    version: 2,
+    timestamp: new Date().toISOString(),
+    book,
+    chapters,
+    characters,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+export async function importFullBackupJSON(jsonStr: string): Promise<{ book: Book; chapters: Chapter[]; characters: CharacterProfile[] }> {
+  const data = JSON.parse(jsonStr);
+  if (!data.book || !Array.isArray(data.chapters)) {
+    throw new Error('Invalid FolioCraft project backup file.');
   }
 
-  const newBookId = `book-${Date.now()}`;
-  const importedBook: BookProject = {
-    ...parsed.book,
-    id: newBookId,
-    title: `${parsed.book.title} (Imported)`,
-    createdAt: Date.now(),
+  const book: Book = {
+    ...data.book,
     updatedAt: Date.now(),
   };
 
-  await saveBook(importedBook);
-
-  const importedSections: BookSection[] = parsed.sections.map((s: BookSection, idx: number) => ({
-    ...s,
-    id: `sec-${newBookId}-${idx}`,
-    bookId: newBookId,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+  const chapters: Chapter[] = data.chapters.map((ch: Chapter) => ({
+    ...ch,
+    bookId: book.id,
   }));
 
-  await saveSections(importedSections);
-  return importedBook;
-}
+  const characters: CharacterProfile[] = Array.isArray(data.characters)
+    ? data.characters.map((c: CharacterProfile) => ({ ...c, bookId: book.id }))
+    : [];
 
-export async function seedInitialDemoIfEmpty(): Promise<{ book: BookProject; sections: BookSection[] }> {
-  const books = await getAllBooks();
-  if (books.length > 0) {
-    const firstBook = books[0];
-    const sections = await getSections(firstBook.id);
-    return { book: firstBook, sections };
+  await saveBook(book);
+  await saveChapters(chapters);
+  if (characters.length > 0) {
+    await saveCharacters(characters);
   }
 
-  // Create starter masterwork book matching Vellum/Atticus showcase
-  const demoBookId = 'book-starter-alchemist';
-  const demoBook: BookProject = {
+  return { book, chapters, characters };
+}
+
+/* ==================== Initial Demo Seeding ==================== */
+
+export async function seedInitialDemoIfEmpty(): Promise<{ book: Book; chapters: Chapter[]; characters: CharacterProfile[] }> {
+  const existingBooks = await getBooks();
+  if (existingBooks.length > 0) {
+    let book = existingBooks[0];
+    let needsUpdate = false;
+    if (!book.styleConfig || !book.styleConfig.chapterOrnamentId) {
+      book = {
+        ...book,
+        styleConfig: {
+          ...getDefaultStyleConfig('literary'),
+          ...(book.styleConfig || {}),
+        },
+      };
+      needsUpdate = true;
+    }
+    if (!book.targetWordCount || !book.dailyWordGoal) {
+      book = {
+        ...book,
+        targetWordCount: book.targetWordCount || 60000,
+        dailyWordGoal: book.dailyWordGoal || 1000,
+        dailyBaselineDate: book.dailyBaselineDate || new Date().toISOString().slice(0, 10),
+        dailyBaselineWords: book.dailyBaselineWords ?? 0,
+      };
+      needsUpdate = true;
+    }
+    const chapters = await getChapters(book.id);
+    const characters = await getCharacters(book.id);
+    if (needsUpdate) {
+      await saveBook(book);
+    }
+    return { book, chapters, characters };
+  }
+
+  const demoBookId = 'book-clockwork-horizon';
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const demoBook: Book = {
     id: demoBookId,
-    title: "The Alchemist's Horizon",
-    subtitle: 'A Chronicle of the Clockwork Guild',
-    author: 'Victoria Vance',
-    publisher: 'Obsidian & Quill Press',
-    edition: 'First Edition',
-    seriesName: 'The Aetherium Chronicles',
-    seriesNumber: 'Book I',
-    isbnEpub: '978-1-987654-32-1',
-    isbnPrint: '978-1-987654-33-8',
+    title: 'The Clockwork Horizon',
+    subtitle: 'A Chronicle of the Brass Archipelago',
+    author: 'Elena R. Sterling',
+    publisher: 'Aetherial Press',
+    isbn: '978-1-73891-002-4',
+    description: 'An atmospheric adventure across mechanical skies, where airships track the dying pulse of forgotten celestial spheres.',
     language: 'en',
-    description: 'When the celestial orrery stumbles mid-rotation, a young apprentice in Prague uncovers an ancient parchment that could unravel the geometry of time itself.',
-    copyrightYear: '2026',
-    rightsStatement: 'All rights reserved. No part of this publication may be reproduced, stored in a retrieval system, or transmitted in any form without prior written permission of the publisher.',
-    themeId: 'theme-classic-literary',
-    trimSize: '6x9',
-    headingFont: "'Cormorant Garamond', Georgia, serif",
-    bodyFont: "'EB Garamond', Georgia, serif",
-    baseFontSize: 16,
-    lineSpacing: 1.6,
-    numberFormat: 'Roman',
-    dropCapEnabled: true,
-    dropCapStyle: 'classic',
-    ornamentKey: 'fleuron',
-    versoHeader: 'title',
-    rectoHeader: 'chapter',
+    genre: 'Fantasy / Steampunk',
+    styleConfig: getDefaultStyleConfig('literary'),
+    autoSaveFrequency: '5s',
+    targetWordCount: 65000,
+    dailyWordGoal: 1000,
+    dailyBaselineDate: todayStr,
+    dailyBaselineWords: 400,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 
-  const sceneBreak = createSceneBreakHtml('fleuron');
-
-  const demoSections: BookSection[] = [
-    // Front matter
+  const demoChapters: Chapter[] = [
     {
-      id: `sec-${demoBookId}-1`,
+      id: 'ch-title',
       bookId: demoBookId,
-      type: 'front',
-      subtype: 'title-page',
       title: 'Title Page',
-      content: `<div style="text-align: center; padding: 3rem 0;">
-        <h1 style="font-size: 2.5rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem;">The Alchemist's Horizon</h1>
-        <p style="font-style: italic; font-size: 1.15rem; color: #71717a; margin-bottom: 2rem;">A Chronicle of the Clockwork Guild</p>
-        <div style="margin: 2rem auto; width: 60px; height: 1px; background: currentColor; opacity: 0.4;"></div>
-        <p style="font-size: 1.4rem; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 3rem;">VICTORIA VANCE</p>
-        <p style="font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.7;">Obsidian & Quill Press · London & Prague</p>
-      </div>`,
-      order: 0,
-      includeInToc: false,
-      dropCap: false,
-      wordCount: 38,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-    {
-      id: `sec-${demoBookId}-2`,
-      bookId: demoBookId,
-      type: 'front',
-      subtype: 'copyright',
-      title: 'Copyright',
-      content: `<div style="font-size: 0.85rem; line-height: 1.7; color: #52525b; max-width: 480px; margin: 4rem auto;">
-        <p><strong>The Alchemist's Horizon</strong></p>
-        <p>Copyright © 2026 by Victoria Vance</p>
-        <p style="margin-top: 1rem;">All rights reserved. Under International Copyright Conventions, no part of this book may be reproduced or utilized in any form or by any electronic, mechanical, or other means, now known or hereafter invented, including xerography, photocopying, and recording, or in any information storage and retrieval system, without written permission from the publisher.</p>
-        <p style="margin-top: 1rem;">Published by Obsidian & Quill Press<br/>Printed in the United States of America</p>
-        <p style="margin-top: 1rem;">eBook ISBN: 978-1-987654-32-1<br/>Print ISBN: 978-1-987654-33-8</p>
-      </div>`,
+      type: 'title-page',
+      group: 'front-matter',
       order: 1,
+      wordCount: 12,
       includeInToc: false,
-      dropCap: false,
-      wordCount: 88,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `
+        <div class="text-center py-12">
+          <h1 class="text-3xl font-serif font-bold uppercase tracking-widest text-neutral-900 dark:text-neutral-100">The Clockwork Horizon</h1>
+          <p class="text-sm italic text-neutral-600 dark:text-neutral-400 mt-2">A Chronicle of the Brass Archipelago</p>
+          <div class="my-8"><span class="inline-block w-12 h-px bg-neutral-400"></span></div>
+          <p class="text-base font-semibold tracking-wide text-neutral-800 dark:text-neutral-200">ELENA R. STERLING</p>
+          <p class="text-xs text-neutral-500 uppercase tracking-widest mt-12">AETHERIAL PRESS &bull; EDINBURGH</p>
+        </div>
+      `,
     },
     {
-      id: `sec-${demoBookId}-3`,
+      id: 'ch-copyright',
       bookId: demoBookId,
-      type: 'front',
-      subtype: 'dedication',
-      title: 'Dedication',
-      content: `<div style="text-align: center; margin: 6rem auto; font-style: italic; font-size: 1.15rem; max-width: 400px; line-height: 1.8;">
-        For those who look upon forgotten stars<br/>and dare to hear the gears turning beneath.
-      </div>`,
+      title: 'Copyright',
+      type: 'copyright',
+      group: 'front-matter',
       order: 2,
+      wordCount: 65,
       includeInToc: false,
-      dropCap: false,
-      wordCount: 17,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `
+        <div class="text-xs text-neutral-500 space-y-3 pt-24 font-sans leading-relaxed">
+          <p>The Clockwork Horizon &copy; 2026 by Elena R. Sterling. All rights reserved.</p>
+          <p>Published by Aetherial Press, London and Edinburgh.</p>
+          <p>This is a work of fiction. Names, characters, businesses, places, events, locales, and incidents are either the products of the author's imagination or used in a fictitious manner.</p>
+          <p>First FolioCraft Collector's Edition: November 2026<br/>ISBN: 978-1-73891-002-4</p>
+        </div>
+      `,
     },
     {
-      id: `sec-${demoBookId}-4`,
+      id: 'ch-toc',
       bookId: demoBookId,
-      type: 'front',
-      subtype: 'epigraph',
-      title: 'Epigraph',
-      content: `<div style="text-align: center; margin: 5rem auto; max-width: 440px; font-style: italic; line-height: 1.8;">
-        <p>“Time is not a stream that washes us away;<br/>it is a crucible, and we are the quicksilver.”</p>
-        <p style="font-style: normal; font-size: 0.9rem; margin-top: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8;">— Master Elias Vane, <em>Tractatus Horologicus</em>, 1642</p>
-      </div>`,
+      title: 'Table of Contents',
+      type: 'toc',
+      group: 'front-matter',
       order: 3,
+      wordCount: 15,
       includeInToc: false,
-      dropCap: false,
-      wordCount: 31,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `<p class="italic text-neutral-500">Table of Contents will automatically populate in publication exports.</p>`,
     },
-
-    // Body Chapters
     {
-      id: `sec-${demoBookId}-5`,
+      id: 'ch-prologue',
       bookId: demoBookId,
-      type: 'body',
-      subtype: 'prologue',
       title: 'Prologue',
-      subtitle: 'The Stumbling Hour',
-      content: `<p>The great copper bells of Old Town did not chime at midnight. Instead, they gave a single, muffled groan, as though a bronze hand had seized the clapper from within the bell tower’s hollow throat.</p>
-      <p>High above the cobblestone alleyways, in the drafty attic of the Royal Astrolabe Foundry, Nicholas froze with a silver needle hovering three inches above the spring-barrel. Outside, the fog smelled of damp stone, sulfur, and unburned coal. On the workbench before him, three dozen clockwork chronometers lay open, their sapphire escapements ticking in frantic, uneven polyrhythms.</p>
-      ${sceneBreak}
-      <p>Then, without warning, the central pendulum stopped.</p>
-      <p>It did not slow. It did not shudder to a gentle halt under the weight of friction. It hung dead at the apex of its leftward swing, suspended at a thirty-degree angle against gravity itself, like a silver tear pinned against the velvet air.</p>`,
+      subtitle: 'The Gilded Astrolabe',
+      number: undefined,
+      type: 'prologue',
+      group: 'body',
       order: 4,
+      wordCount: 220,
+      targetWordCount: 1500,
       includeInToc: true,
-      dropCap: true,
-      wordCount: 145,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `
+        <p>The dawn broke over the Brass Archipelago not with birdsong, but with the steady, synchronized ticking of eleven thousand suspended pendulum towers. Through the sulfur mist, the Great Meridian rotated upon immense jade bearings, whispering forgotten equations to the empty sky.</p>
+        <p>High above the harbor docks, Nicholas Drake adjusted the brass aperture of his ocular lens. The atmospheric barometer was plunging faster than a punctured gasbag. Something colossal was disturbing the ionosphere, carving trenches of ozone through clouds that had known only wind for centuries.</p>
+        <hr />
+        <p>He folded the copper quadrant into his canvas waistcoat and stepped to the edge of the iron gantry. The air smelled of burnt camphor and ozone. Far below, the bells of St. Jude's Basilica began to chime, but their intervals were wrong—fractions of a second late, as if time itself had grown viscous and resistant.</p>
+      `,
     },
     {
-      id: `sec-${demoBookId}-6`,
+      id: 'ch-1',
       bookId: demoBookId,
-      type: 'body',
-      subtype: 'chapter',
-      title: 'Chapter I',
-      subtitle: 'The Apprentice’s Lantern',
-      epigraph: 'Every mechanism holds an imperfection, and therein lies its soul.',
-      content: `<p>Dawn crept over Prague like gray ink spilled across parchment. Nicholas buttoned his wool waistcoat against the river chill, blew out the sputtering whale-oil lantern, and gathered the rolled vellum charts into his leather satchel.</p>
-      <p>Across the courtyard, Master Gerhard had not slept. The old guildsman was bent double over the furnace table, the glowing ruby lens strapped to his left eye magnifying an iris clouded with eighty winters. His gnarled hands moved over a sphere of polished brass—not the customary terrestrial globe, but something older, etched with constellations whose names had been forbidden by the Council of Venice.</p>
-      <p>“You felt it, then,” Gerhard said, without lifting his gaze. His voice sounded like dry gravel dragged beneath a heavy heel.</p>
-      <p>“Three minutes past midnight, Master,” Nicholas replied, keeping his distance from the smoking alembic. “The escapements refused their teeth. The pendulum held at the zenith for seventeen seconds.”</p>
-      ${sceneBreak}
-      <p>The old man set down his micro-tweezers. A faint metallic aroma—part ozone, part crushed rosemary—drifted up from the brass sphere. When he turned, the ruby lens flashed in the morning twilight like an unblinking coal.</p>
-      <p>“Seventeen seconds,” Gerhard whispered, almost reverently. “The astronomers believe the heavens move in circles, boy. They build their instruments to measure circles. But the universe is an escapement. And somewhere in the dark between the stars, a tooth has broken.”</p>`,
+      title: 'Chapter One',
+      subtitle: 'Tides of Molten Glass',
+      number: 1,
+      type: 'chapter',
+      group: 'body',
       order: 5,
+      wordCount: 380,
+      targetWordCount: 3000,
       includeInToc: true,
-      dropCap: true,
-      wordCount: 226,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `
+        <p>No one ever explained to the apprentices of the Admiralty Why the horizon curved upward at the rim of the world. It was simply accepted as one accepts the weight of copper coins or the bite of winter brine.</p>
+        <p>Master Julian sat hunched over the drafting table, his calloused thumbs smoothing the vellum charts of the Cerulean Gulf. Across the bay, the leviathan boilers of the Iron Citadel exhaled plumes of pearlescent steam that drifted lazily toward the moon.</p>
+        <p>"You doubt the reading, Nicholas," the old cartographer murmured without raising his eyes from the ink compass. "You believe the chronometer has succumbed to salt damp."</p>
+        <p>"The variance is thirty-seven arc-seconds, sir," Nicholas replied, resting his gloved hands upon the cedar balustrade. "Salt damp can rust an escapement spring, but it cannot bend the alignment of Polaris."</p>
+        <hr />
+        <p>Julian slowly lifted his head. The gaslamp caught the faint silver lattice etched into his artificial eye. When he spoke again, his voice possessed that rare quietude that precedes artillery fire.</p>
+        <p>"Then pack your sextant, lad. The Sovereign's flagship departs on the midnight tide, and the Emperor has forbidden any living soul from disembarking until the meridian is restored."</p>
+      `,
     },
     {
-      id: `sec-${demoBookId}-7`,
+      id: 'ch-about',
       bookId: demoBookId,
-      type: 'body',
-      subtype: 'chapter',
-      title: 'Chapter II',
-      subtitle: 'The Cipher of Saint Vitus',
-      content: `<p>The archives of Saint Vitus lay beneath thirty feet of Bohemian sandstone, where moisture gathered on the vaulted arches in heavy beads that fell with the rhythmic persistence of water clocks.</p>
-      <p>Nicholas carried only a horn lantern and an iron key shaped like a double-headed griffin. The air was frigid enough to turn his breath into pale plumes. Row upon row of bound ledgers stretched into the subterranean gloom: church registers, tax tallies from the reign of Charles IV, and confessions whispered centuries before gunpowder reached Europe.</p>
-      <p>He was looking for box thirty-seven: the private correspondence of Brother Anselm, who had been burnt in the public square in 1419 for claiming that the stars were molten bronze wheels propelled by celestial oil.</p>
-      ${sceneBreak}
-      <p>When Nicholas pulled the rusted tin case from the lower shelf, a moth fluttered into the lantern beam, blinded by the sudden flame. Inside lay three sheets of vellum, so thin they were almost translucent. When held against the horn lantern, hidden ink appeared between the Latin prayers: geometric proofs, planetary gears with prime-number tooth counts, and a diagram of an aperture located beneath the altar of Old Town square.</p>`,
-      order: 6,
-      includeInToc: true,
-      dropCap: true,
-      wordCount: 198,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-
-    // Back matter
-    {
-      id: `sec-${demoBookId}-8`,
-      bookId: demoBookId,
-      type: 'back',
-      subtype: 'acknowledgments',
-      title: 'Acknowledgments',
-      content: `<div style="line-height: 1.8; max-width: 520px; margin: 2rem auto;">
-        <p>This novel could not have been written without the horological guidance of the British Horological Institute, who generously answered arcane inquiries regarding seventeenth-century escapement tolerances and fusee chains.</p>
-        <p style="margin-top: 1rem;">To my agent, Clara Finch, whose faith in an apprentice clockmaker never wavered. To my editor, Julian Reed, whose editorial red pen wielded the precision of a master watchmaker’s chisel.</p>
-        <p style="margin-top: 1rem;">And finally, to my partner, Marcus: thank you for keeping the tea warm during long winter nights of writing.</p>
-      </div>`,
-      order: 7,
-      includeInToc: true,
-      dropCap: false,
-      wordCount: 95,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-    {
-      id: `sec-${demoBookId}-9`,
-      bookId: demoBookId,
-      type: 'back',
-      subtype: 'about-author',
       title: 'About the Author',
-      content: `<div style="line-height: 1.8; max-width: 520px; margin: 2rem auto;">
-        <p><strong>Victoria Vance</strong> is an award-winning historical novelist and mechanical engineer. Before turning to fiction full-time, she spent a decade restoring antique astronomical clocks across Central Europe.</p>
-        <p style="margin-top: 1rem;">She lives in Edinburgh with two Scottish terriers and an unruly collection of brass chronometers. When not writing, she can be found wandering second-hand bookstores or tinkering with antique music boxes.</p>
-        <p style="margin-top: 1.5rem; font-style: italic;">Connect with Victoria at www.victoriavancebooks.com</p>
-      </div>`,
-      order: 8,
+      type: 'about-author',
+      group: 'back-matter',
+      order: 6,
+      wordCount: 110,
       includeInToc: true,
-      dropCap: false,
-      wordCount: 76,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      pageBreakBefore: true,
+      content: `
+        <p>Elena R. Sterling is a speculative fiction author, former marine chronometer restorer, and avid collector of antique astrolabes. Her novels explore the intersections of Victorian industry, celestial mechanics, and human solitude.</p>
+        <p>She lives in the Scottish Highlands with two greyhounds and an iron printing press named Hephaestus.</p>
+      `,
+    },
+  ];
+
+  const demoCharacters: CharacterProfile[] = [
+    {
+      id: 'char-nicholas-drake',
+      bookId: demoBookId,
+      name: 'Nicholas Drake',
+      role: 'protagonist',
+      aliases: 'Nick, The Observatory Apprentice',
+      age: '22',
+      occupation: 'Junior Celestial Cartographer',
+      color: '#f59e0b',
+      physicalTraits: 'Lean athletic build; unruly dark chestnut hair perpetually dusted with graphite; keen hazel eyes behind custom brass-framed bifocals; ink-stained knuckles on his right hand.',
+      bio: 'Orphaned during the Great Brass Collapse of 1884, Nicholas was taken under the wing of Master Julian Vance. Possesses an extraordinary intuitive gift for celestial mechanics and mechanical acoustics.',
+      personalityTraits: 'Meticulous, quiet under pressure, stubborn when facts contradict authority. Speaks in precise, clipped cadences.',
+      notes: 'Carries a pocket watch that runs backward—a legacy left behind by his cartographer mother.',
+      createdAt: Date.now() - 3600000,
+      updatedAt: Date.now() - 3600000,
     },
     {
-      id: `sec-${demoBookId}-10`,
+      id: 'char-lady-seraphina',
       bookId: demoBookId,
-      type: 'back',
-      subtype: 'also-by',
-      title: 'Also by Victoria Vance',
-      content: `<div style="text-align: center; line-height: 2; margin: 3rem auto; max-width: 460px;">
-        <p style="font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem;">The Aetherium Chronicles</p>
-        <p><em>The Alchemist's Horizon</em> (Book I)</p>
-        <p><em>The Celestial Escapement</em> (Book II — Coming 2027)</p>
-        <div style="margin: 2rem auto; width: 40px; height: 1px; background: currentColor; opacity: 0.3;"></div>
-        <p style="font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem;">Stand-alone Novels</p>
-        <p><em>The Glass Foundry of Murano</em></p>
-        <p><em>Shadows over the Moldau</em></p>
-      </div>`,
-      order: 9,
-      includeInToc: false,
-      dropCap: false,
-      wordCount: 52,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      name: 'Lady Seraphina Vance',
+      role: 'antagonist',
+      aliases: 'The Iron Baroness, Director Vance',
+      age: '44',
+      occupation: 'High Chancellor of the Meridian Admiralty',
+      color: '#e11d48',
+      physicalTraits: 'Tall, aristocratically upright; silver-streaked raven hair woven into intricate coil braids; cold slate-gray eyes; wears high-collared velvet coats adorned with gearwork insignias.',
+      bio: 'Julian Vance\'s estranged younger sister. Believes the celestial shift is not a catastrophe to be averted, but a planned cosmic ascension that will purge weakness from the Archipelago.',
+      personalityTraits: 'Ruthlessly pragmatic, silken voiced, never raises her temper; every word is measured like poison in a cordial.',
+      notes: 'Has clandestine dealings with the guild saboteurs who tampered with the Central Pendulum.',
+      createdAt: Date.now() - 3600000,
+      updatedAt: Date.now() - 3600000,
+    },
+    {
+      id: 'char-master-julian',
+      bookId: demoBookId,
+      name: 'Master Julian Vance',
+      role: 'supporting',
+      aliases: 'Old Julian, The Blind Astrologer',
+      age: '68',
+      occupation: 'Chief Cartographer Emeritus of St. Jude\'s',
+      color: '#10b981',
+      physicalTraits: 'Stooped shoulders, weathered parchment skin, artificial left eye made of polished silver and sapphire crystal; fingers scarred from decades of molten solder.',
+      bio: 'Once the most celebrated navigator of the Queen\'s sky-fleet. Stepped down forty years ago after an expedition beyond the Great Meridian whose logs remain heavily redacted.',
+      personalityTraits: 'Gruff exterior masking profound paternal affection for Nicholas. Smokes sweet cherry tobacco in a carved briar pipe.',
+      notes: 'Knows the exact coordinates where the horizon folds, but fears what will awaken if Nicholas goes there.',
+      createdAt: Date.now() - 3600000,
+      updatedAt: Date.now() - 3600000,
     },
   ];
 
   await saveBook(demoBook);
-  await saveSections(demoSections);
+  await saveChapters(demoChapters);
+  await saveCharacters(demoCharacters);
 
-  return { book: demoBook, sections: demoSections };
+  return { book: demoBook, chapters: demoChapters, characters: demoCharacters };
 }

@@ -1,87 +1,55 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
 
-@layer base {
-  :root {
-    --font-serif: 'EB Garamond', Georgia, serif;
-    --font-cormorant: 'Cormorant Garamond', Georgia, serif;
-    --font-display: 'Playfair Display', Georgia, serif;
-    --font-cinzel: 'Cinzel', serif;
-    --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+@layer utilities {
+  .font-serif-cormorant {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+  .font-serif-cinzel {
+    font-family: 'Cinzel', serif;
+  }
+  .font-serif-playfair {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+  .font-serif-eb {
+    font-family: 'EB Garamond', Georgia, serif;
+  }
+  .font-serif-spectral {
+    font-family: 'Spectral', Georgia, serif;
   }
 }
 
-/* Custom Drop Cap Styling */
-.drop-cap-classic::first-letter {
-  float: left;
-  font-family: var(--font-cormorant);
-  font-size: 3.8em;
-  line-height: 0.8;
-  padding-top: 4px;
-  padding-right: 8px;
-  padding-bottom: 2px;
-  font-weight: 600;
-  color: inherit;
+/* Custom scrollbars for professional desktop studio */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
-.drop-cap-modern::first-letter {
-  float: left;
-  font-family: var(--font-sans);
-  font-size: 3.4em;
-  line-height: 0.8;
-  padding-top: 4px;
-  padding-right: 10px;
-  font-weight: 700;
-  color: #d97706;
+/* Page Break marker for editor */
+.folio-page-break {
+  position: relative;
+  user-select: none;
 }
 
-.drop-cap-ornate::first-letter {
-  float: left;
-  font-family: var(--font-cinzel);
-  font-size: 4em;
-  line-height: 0.75;
-  padding-top: 6px;
-  padding-right: 10px;
-  font-weight: 700;
-  color: #b45309;
+/* Drop caps */
+.has-dropcap .drop-cap-letter {
+  margin-right: 0.2em;
+  margin-top: -0.05em;
 }
 
-/* Print CSS Media Rules for direct high-res print export */
-@media print {
-  body {
-    background: white !important;
-    color: black !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-
-  .print-only {
-    display: block !important;
-  }
-
-  @page {
-    margin: 0.75in 0.65in 0.75in 0.85in; /* Inside gutter for binding */
-  }
-
-  @page :left {
-    margin-left: 0.65in;
-    margin-right: 0.85in;
-  }
-
-  @page :right {
-    margin-left: 0.85in;
-    margin-right: 0.65in;
-  }
-
-  .print-page-break {
-    page-break-before: always;
-    break-before: page;
-  }
-
-  .print-chapter-start {
-    page-break-before: right;
-    break-before: right;
-  }
+/* Device screen simulation */
+.device-shadow-kindle {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.device-shadow-apple {
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 12px #262626;
 }

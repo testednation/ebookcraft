@@ -1,105 +1,108 @@
-export type SectionType = 'front' | 'body' | 'back';
-
-export type SectionSubtype = 
+export type SectionType =
   | 'title-page'
   | 'copyright'
   | 'dedication'
   | 'epigraph'
   | 'toc'
-  | 'part'
-  | 'chapter'
   | 'prologue'
+  | 'chapter'
   | 'epilogue'
-  | 'acknowledgments'
-  | 'about-author'
-  | 'also-by'
-  | 'custom';
+  | 'afterword'
+  | 'about-author';
 
-export interface BookSection {
+export type SectionGroup = 'front-matter' | 'body' | 'back-matter';
+
+export interface Chapter {
   id: string;
   bookId: string;
-  type: SectionType;
-  subtype: SectionSubtype;
   title: string;
   subtitle?: string;
-  epigraph?: string;
-  content: string; // HTML content
+  number?: number;
+  type: SectionType;
+  group: SectionGroup;
+  content: string; // HTML content from rich editor
   order: number;
-  includeInToc: boolean;
-  dropCap: boolean;
-  customOrnament?: string;
   wordCount: number;
-  createdAt: number;
-  updatedAt: number;
+  targetWordCount?: number; // Per-chapter goal (e.g. 2500 words)
+  customOrnamentId?: string;
+  includeInToc: boolean;
+  pageBreakBefore: boolean;
 }
 
-export type TrimSizeId = '5x8' | '5.5x8.5' | '6x9' | '7x10' | '8.5x11';
+export type GenreThemeId = 'literary' | 'modern' | 'fantasy' | 'nonfiction';
 
-export interface TrimSizeOption {
-  id: TrimSizeId;
-  name: string;
-  widthInches: number;
-  heightInches: number;
-  description: string;
-}
+export type FontChoice =
+  | 'Cormorant Garamond'
+  | 'EB Garamond'
+  | 'Playfair Display'
+  | 'Spectral'
+  | 'Cinzel'
+  | 'Inter'
+  | 'system-ui';
 
-export const TRIM_SIZES: TrimSizeOption[] = [
-  { id: '5x8', name: '5 × 8 in', widthInches: 5, heightInches: 8, description: 'Popular for fiction & poetry paperbacks' },
-  { id: '5.5x8.5', name: '5.5 × 8.5 in', widthInches: 5.5, heightInches: 8.5, description: 'Digest size, great for memoirs & non-fiction' },
-  { id: '6x9', name: '6 × 9 in (US Trade)', widthInches: 6, heightInches: 9, description: 'Standard US Trade size for novels & hardcovers' },
-  { id: '7x10', name: '7 × 10 in', widthInches: 7, heightInches: 10, description: 'Textbooks, manuals & graphic-heavy layouts' },
-  { id: '8.5x11', name: '8.5 × 11 in', widthInches: 8.5, heightInches: 11, description: 'Workbooks, standard letter size' },
-];
+export type DropCapStyle = 'none' | 'simple' | 'illuminated' | 'raised';
 
-export type NumberFormat = 'Roman' | 'Arabic' | 'Word' | 'None';
-
-export type GenrePreset = 'literary' | 'modern' | 'fantasy' | 'nonfiction';
-
-export interface BookTheme {
+export interface StyleConfig {
   id: string;
-  name: string;
-  preset: GenrePreset;
-  description: string;
-  headingFont: string;
-  bodyFont: string;
-  ornamentKey: string;
-  dropCapStyle: 'classic' | 'modern' | 'ornate' | 'none';
-  headerAlignment: 'center' | 'left';
-  chapterTitleTransform: 'uppercase' | 'capitalize' | 'none';
-  showRule: boolean;
+  themeId: GenreThemeId;
+  bodyFont: FontChoice;
+  headingFont: FontChoice;
+  fontSizePt: number; // 10, 11, 12, etc.
+  lineSpacing: number; // 1.3, 1.4, 1.5, 1.6
+  paragraphIndentEm: number; // 0, 1, 1.25, 1.5
+  paragraphSpacingPt: number; // 0 for fiction, 6-12 for non-fiction
+  dropCap: DropCapStyle;
+  firstParagraphDropCap: boolean;
+  firstParagraphSmallCaps: boolean;
+  chapterOrnamentId: string; // 'none', 'fleuron', 'flourish-ivy', 'geometric-stars', 'dashes'
+  sceneBreakOrnamentId: string;
+  pageNumbering: 'bottom-center' | 'bottom-outer' | 'top-outer' | 'none';
+  headerText: 'title-and-chapter' | 'author-and-title' | 'none';
+  trimSize: '5x8' | '5.5x8.5' | '6x9';
 }
 
-export interface BookProject {
+export type AutoSaveFrequency = 'immediate' | '5s' | '15s' | '30s' | 'manual';
+
+export interface Book {
   id: string;
   title: string;
   subtitle?: string;
   author: string;
   publisher?: string;
-  edition?: string;
-  seriesName?: string;
-  seriesNumber?: string;
-  isbnEpub?: string;
-  isbnPrint?: string;
-  language: string;
+  isbn?: string;
   description?: string;
-  copyrightYear: string;
-  rightsStatement: string;
-  coverImage?: string; // Base64 data URL
-  
-  // Formatting preferences matching Atticus/Vellum
-  themeId: string;
-  trimSize: TrimSizeId;
-  headingFont: string;
-  bodyFont: string;
-  baseFontSize: number; // 14 to 20
-  lineSpacing: number; // 1.3 to 2.0
-  numberFormat: NumberFormat;
-  dropCapEnabled: boolean;
-  dropCapStyle: 'classic' | 'modern' | 'ornate' | 'none';
-  ornamentKey: string;
-  versoHeader: 'title' | 'author' | 'none';
-  rectoHeader: 'chapter' | 'title' | 'none';
+  coverImage?: string; // Data URL or object URL
+  language: string;
+  genre: string;
+  styleConfig: StyleConfig;
+  autoSaveFrequency: AutoSaveFrequency;
+  targetWordCount?: number; // Total manuscript target (e.g. 60,000 words)
+  dailyWordGoal?: number; // Daily writing target (e.g. 1,000 words)
+  dailyBaselineWords?: number; // Starting word count at start of today's date
+  dailyBaselineDate?: string; // YYYY-MM-DD for daily progress calculation
+  createdAt: number;
+  updatedAt: number;
+}
 
+export type DeviceType = 'kindle' | 'apple-books' | 'print-spread';
+
+export type DeviceTheme = 'light' | 'sepia' | 'dark';
+
+export type CharacterRole = 'protagonist' | 'antagonist' | 'supporting' | 'minor';
+
+export interface CharacterProfile {
+  id: string;
+  bookId: string;
+  name: string;
+  role: CharacterRole;
+  aliases?: string;
+  age?: string;
+  occupation?: string;
+  physicalTraits: string; // Key traits: eyes, height, build, distinctive attire
+  bio: string; // Backstory, motive, history
+  personalityTraits?: string; // Voice, demeanor, speech habits
+  notes?: string; // Author secrets, arc notes
+  color?: string; // Avatar accent color badge (hex)
   createdAt: number;
   updatedAt: number;
 }

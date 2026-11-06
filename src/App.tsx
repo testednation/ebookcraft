@@ -1,304 +1,457 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { BookProject, BookSection, SectionType, SectionSubtype } from './types/book';
-import { 
-  getAllBooks, 
-  getSections, 
-  saveBook, 
-  saveSection, 
-  saveSections, 
-  deleteSection, 
-  seedInitialDemoIfEmpty 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Book, Chapter, CharacterProfile, SectionGroup, SectionType, StyleConfig } from './types/book';
+import {
+  seedInitialDemoIfEmpty,
+  saveBook,
+  saveChapter,
+  saveChapters,
+  deleteChapter,
+  saveCharacter,
+  deleteCharacter,
 } from './services/storage';
-import { parseTextOrMarkdownFile } from './services/fileImporter';
+import { getDefaultStyleConfig } from './services/themes';
 import { Header } from './components/Header';
 import { SidebarNav } from './components/SidebarNav';
 import { EditorPane } from './components/EditorPane';
-import { DevicePreviewer } from './components/DevicePreviewer';
-import { ThemeStyleModal } from './components/ThemeStyleModal';
+import { PreviewPane } from './components/PreviewPane';
+import { StyleModal } from './components/StyleModal';
 import { BookDetailsModal } from './components/BookDetailsModal';
 import { ExportModal } from './components/ExportModal';
+import { CharacterModal } from './components/CharacterModal';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
-  const [loading, setLoading] = useState(true);
-  const [allBooks, setAllBooks] = useState<BookProject[]>([]);
-  const [currentBook, setCurrentBook] = useState<BookProject | null>(null);
-  const [sections, setSections] = useState<BookSection[]>([]);
-  const [activeSectionId, setActiveSectionId] = useState<string>('');
+  const [book, setBook] = useState<Book | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [characters, setCharacters] = useState<CharacterProfile[]>([]);
+  const [activeChapterId, setActiveChapterId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Modals state
-  const [isThemesOpen, setIsThemesOpen] = useState(false);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [isExportOpen, setIsExportOpen] = useState(false);
+  // Persistence & Auto-save status
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize from IndexedDB
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const { book, sections: initialSections } = await seedInitialDemoIfEmpty();
-        const books = await getAllBooks();
-        setAllBooks(books);
-        setCurrentBook(book);
-        setSections(initialSections);
-        if (initialSections.length > 0) {
-          // Default to the first body chapter or first section
-          const firstChapter = initialSections.find((s) => s.subtype === 'chapter') || initialSections[0];
-          setActiveSectionId(firstChapter.id);
-        }
-      } catch (err) {
-        console.error('Failed to initialize FolioCraft database:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+  // Pane & Modals state
+  const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(true);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState<boolean>(false);
+  const [isBookDetailsModalOpen, setIsBookDetailsModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
-  // Switch book
-  const handleSelectBook = async (bookId: string) => {
-    const selected = allBooks.find((b) => b.id === bookId);
-    if (!selected) return;
-    setCurrentBook(selected);
-    const secs = await getSections(selected.id);
-    setSections(secs);
-    if (secs.length > 0) {
-      setActiveSectionId(secs[0].id);
-    }
-  };
+  // Character Modal state
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState<boolean>(false);
+  const [selectedCharacterForModal, setSelectedCharacterForModal] = useState<CharacterProfile | null>(null);
 
-  // Create new book project
-  const handleNewBook = async () => {
-    const title = prompt('Enter the title of your new book:', 'Untitled Manuscript');
-    if (!title) return;
-
-    const newBookId = `book-${Date.now()}`;
-    const newBook: BookProject = {
-      id: newBookId,
-      title,
-      author: 'Author Name',
-      language: 'en',
-      copyrightYear: new Date().getFullYear().toString(),
-      rightsStatement: 'All rights reserved.',
-      themeId: 'theme-classic-literary',
-      trimSize: '6x9',
-      headingFont: "'Cormorant Garamond', Georgia, serif",
-      bodyFont: "'EB Garamond', Georgia, serif",
-      baseFontSize: 16,
-      lineSpacing: 1.6,
-      numberFormat: 'Roman',
-      dropCapEnabled: true,
-      dropCapStyle: 'classic',
-      ornamentKey: 'fleuron',
-      versoHeader: 'title',
-      rectoHeader: 'chapter',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const initialChapter: BookSection = {
-      id: `sec-${newBookId}-1`,
-      bookId: newBookId,
-      type: 'body',
-      subtype: 'chapter',
-      title: 'Chapter I',
-      content: '<p>Start writing your story here...</p>',
-      order: 0,
-      includeInToc: true,
-      dropCap: true,
-      wordCount: 6,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    await saveBook(newBook);
-    await saveSection(initialChapter);
-
-    setAllBooks((prev) => [...prev, newBook]);
-    setCurrentBook(newBook);
-    setSections([initialChapter]);
-    setActiveSectionId(initialChapter.id);
-  };
-
-  // Update active book metadata
-  const handleUpdateBook = async (updated: BookProject) => {
-    setCurrentBook(updated);
-    setAllBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-    await saveBook(updated);
-  };
-
-  // Update active section
-  const handleUpdateSection = async (updated: BookSection) => {
-    setSections((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-    await saveSection(updated);
-  };
-
-  // Add new section
-  const handleAddSection = async (type: SectionType, subtype: SectionSubtype, title: string) => {
-    if (!currentBook) return;
-
-    const newSec: BookSection = {
-      id: `sec-${currentBook.id}-${Date.now()}`,
-      bookId: currentBook.id,
-      type,
-      subtype,
-      title,
-      content: `<p>New ${title.toLowerCase()} content...</p>`,
-      order: sections.length,
-      includeInToc: type === 'body',
-      dropCap: type === 'body',
-      wordCount: 4,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const updatedSections = [...sections, newSec];
-    setSections(updatedSections);
-    setActiveSectionId(newSec.id);
-    await saveSection(newSec);
-  };
-
-  // Delete section
-  const handleDeleteSection = async (id: string) => {
-    const updated = sections.filter((s) => s.id !== id);
-    setSections(updated);
-    if (activeSectionId === id && updated.length > 0) {
-      setActiveSectionId(updated[0].id);
-    }
-    await deleteSection(id);
-  };
-
-  // Reorder section up / down
-  const handleMoveSection = async (id: string, direction: 'up' | 'down') => {
-    const index = sections.findIndex((s) => s.id === id);
-    if (index === -1) return;
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === sections.length - 1) return;
-
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const reordered = [...sections];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-
-    // Update orders
-    const normalized = reordered.map((sec, idx) => ({ ...sec, order: idx }));
-    setSections(normalized);
-    await saveSections(normalized);
-  };
-
-  // Import text / markdown chapter
-  const handleImportFile = async (file: File) => {
-    if (!currentBook) return;
-    try {
-      const imported = await parseTextOrMarkdownFile(file, currentBook.id, sections.length);
-      const updated = [...sections, imported];
-      setSections(updated);
-      setActiveSectionId(imported.id);
-      await saveSection(imported);
-    } catch (err) {
-      alert(`Import failed: ${(err as Error).message}`);
-    }
-  };
+  // Active Chapter reference
+  const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0] || null;
 
   // Total word count calculation
-  const totalWordCount = useMemo(() => {
-    return sections.reduce((sum, s) => sum + (s.wordCount || 0), 0);
-  }, [sections]);
+  const totalWordCount = chapters.reduce((acc, curr) => acc + (curr.wordCount || 0), 0);
 
-  // Current active section
-  const activeSection = useMemo(() => {
-    return sections.find((s) => s.id === activeSectionId) || sections[0] || null;
-  }, [sections, activeSectionId]);
+  // Initialize DB on mount
+  useEffect(() => {
+    async function init() {
+      try {
+        const demo = await seedInitialDemoIfEmpty();
+        setBook(demo.book);
+        setChapters(demo.chapters);
+        setCharacters(demo.characters || []);
+        if (demo.chapters.length > 0) {
+          // Default to prologue or first chapter if available
+          const firstBody = demo.chapters.find((c) => c.group === 'body') || demo.chapters[0];
+          setActiveChapterId(firstBody.id);
+        }
+      } catch (err) {
+        console.error('Failed to initialize database:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    init();
+  }, []);
 
-  if (loading || !currentBook) {
+  // Manual save handler
+  const handleSaveAll = useCallback(async () => {
+    if (!book) return;
+    setSaveStatus('saving');
+    try {
+      await saveBook(book);
+      if (chapters.length > 0) {
+        await saveChapters(chapters);
+      }
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('Failed to save book to IndexedDB:', err);
+      setSaveStatus('unsaved');
+    }
+  }, [book, chapters]);
+
+  // Trigger auto-save based on book.autoSaveFrequency
+  const triggerAutoSave = useCallback(() => {
+    if (!book) return;
+    const freq = book.autoSaveFrequency || '5s';
+
+    if (freq === 'manual') {
+      setSaveStatus('unsaved');
+      return;
+    }
+
+    if (freq === 'immediate') {
+      handleSaveAll();
+      return;
+    }
+
+    setSaveStatus('unsaved');
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    const delayMs = freq === '5s' ? 5000 : freq === '15s' ? 15000 : 30000;
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSaveAll();
+    }, delayMs);
+  }, [book, handleSaveAll]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Global Keyboard Shortcuts (Ctrl+S, Ctrl+N, Ctrl+P)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (!isCmdOrCtrl) return;
+
+      // Ctrl + S (Save)
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleSaveAll();
+      }
+
+      // Ctrl + P (Toggle Device Preview)
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        setIsPreviewOpen((prev) => !prev);
+      }
+
+      // Ctrl + N (Add New Body Chapter)
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        handleAddChapter('body', 'chapter');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSaveAll]);
+
+  // Update active chapter contents
+  const handleUpdateChapter = (updates: Partial<Chapter>) => {
+    if (!activeChapterId) return;
+
+    setChapters((prev) =>
+      prev.map((ch) => {
+        if (ch.id === activeChapterId) {
+          const updated = { ...ch, ...updates };
+          // Save single chapter in background
+          saveChapter(updated).catch(console.error);
+          return updated;
+        }
+        return ch;
+      })
+    );
+
+    triggerAutoSave();
+  };
+
+  // Add chapter or front/back matter section
+  const handleAddChapter = async (group: SectionGroup, type?: SectionType) => {
+    if (!book) return;
+
+    const groupChapters = chapters.filter((c) => c.group === group);
+    const newNumber = group === 'body' ? groupChapters.length + 1 : undefined;
+    const defaultTitle =
+      group === 'body'
+        ? `Chapter ${newNumber || chapters.length + 1}`
+        : group === 'front-matter'
+        ? 'Preface'
+        : 'Afterword';
+
+    const newChapter: Chapter = {
+      id: `ch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      bookId: book.id,
+      title: defaultTitle,
+      type: type || (group === 'body' ? 'chapter' : group === 'front-matter' ? 'prologue' : 'afterword'),
+      group,
+      number: newNumber,
+      order: chapters.length + 1,
+      wordCount: 0,
+      includeInToc: true,
+      pageBreakBefore: true,
+      content: '<p></p>',
+    };
+
+    const updated = [...chapters, newChapter];
+    setChapters(updated);
+    setActiveChapterId(newChapter.id);
+    await saveChapter(newChapter);
+    triggerAutoSave();
+  };
+
+  // Delete chapter
+  const handleDeleteChapter = async (id: string) => {
+    if (chapters.length <= 1) return;
+    const remaining = chapters.filter((c) => c.id !== id);
+    setChapters(remaining);
+
+    if (activeChapterId === id) {
+      setActiveChapterId(remaining[0].id);
+    }
+
+    await deleteChapter(id);
+    triggerAutoSave();
+  };
+
+  // Reorder chapters up or down
+  const handleReorderChapter = async (id: string, direction: 'up' | 'down') => {
+    const index = chapters.findIndex((c) => c.id === id);
+    if (index === -1) return;
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === chapters.length - 1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...chapters];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+
+    // Resequence order index
+    const reordered = updated.map((ch, idx) => ({ ...ch, order: idx + 1 }));
+    setChapters(reordered);
+    await saveChapters(reordered);
+    triggerAutoSave();
+  };
+
+  // Character Profiles CRUD
+  const handleOpenCharacterModal = (char?: CharacterProfile) => {
+    setSelectedCharacterForModal(char || null);
+    setIsCharacterModalOpen(true);
+  };
+
+  const handleSaveCharacter = async (char: CharacterProfile) => {
+    const existingIndex = characters.findIndex((c) => c.id === char.id);
+    let updatedChars: CharacterProfile[];
+    if (existingIndex >= 0) {
+      updatedChars = [...characters];
+      updatedChars[existingIndex] = char;
+    } else {
+      updatedChars = [...characters, char];
+    }
+    setCharacters(updatedChars);
+    await saveCharacter(char);
+    triggerAutoSave();
+  };
+
+  const handleDeleteCharacter = async (id: string) => {
+    const updated = characters.filter((c) => c.id !== id);
+    setCharacters(updated);
+    await deleteCharacter(id);
+    triggerAutoSave();
+  };
+
+  // Insert character name into editor
+  const handleInsertCharacterName = (name: string) => {
+    // Dispatch a custom event or directly trigger text insertion
+    const editor = document.querySelector('[contenteditable="true"]') as HTMLElement | null;
+    if (editor) {
+      editor.focus();
+      document.execCommand('insertText', false, ` ${name} `);
+      const text = editor.innerText || '';
+      const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+      handleUpdateChapter({
+        content: editor.innerHTML,
+        wordCount,
+      });
+    }
+  };
+
+  // Update Style Config
+  const handleSaveStyle = async (newConfig: StyleConfig) => {
+    if (!book) return;
+    const updatedBook: Book = {
+      ...book,
+      styleConfig: newConfig,
+      updatedAt: Date.now(),
+    };
+    setBook(updatedBook);
+    await saveBook(updatedBook);
+    triggerAutoSave();
+  };
+
+  // Update Book Metadata
+  const handleSaveBookDetails = async (updatedBook: Book) => {
+    setBook(updatedBook);
+    await saveBook(updatedBook);
+    triggerAutoSave();
+  };
+
+  // Update Book Targets & Daily Word Goal
+  const handleUpdateBookGoals = async (goals: {
+    targetWordCount: number;
+    dailyWordGoal: number;
+    resetTodayBaseline?: boolean;
+  }) => {
+    if (!book) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const updatedBook: Book = {
+      ...book,
+      targetWordCount: goals.targetWordCount,
+      dailyWordGoal: goals.dailyWordGoal,
+      ...(goals.resetTodayBaseline
+        ? { dailyBaselineWords: totalWordCount, dailyBaselineDate: todayStr }
+        : {}),
+      updatedAt: Date.now(),
+    };
+    setBook(updatedBook);
+    await saveBook(updatedBook);
+    triggerAutoSave();
+  };
+
+  // Update specific Chapter Target Word Count
+  const handleUpdateChapterTarget = async (chapterId: string, target: number) => {
+    const updatedChapters = chapters.map((ch) =>
+      ch.id === chapterId ? { ...ch, targetWordCount: target } : ch
+    );
+    setChapters(updatedChapters);
+    const changed = updatedChapters.find((c) => c.id === chapterId);
+    if (changed) {
+      await saveChapter(changed);
+    }
+    triggerAutoSave();
+  };
+
+  // Import Backup
+  const handleImportBackup = (restored: { book: Book; chapters: Chapter[]; characters: CharacterProfile[] }) => {
+    setBook(restored.book);
+    setChapters(restored.chapters);
+    setCharacters(restored.characters || []);
+    if (restored.chapters.length > 0) {
+      setActiveChapterId(restored.chapters[0].id);
+    }
+    setSaveStatus('saved');
+  };
+
+  // Import Chapters from text/markdown
+  const handleImportChapters = async (newChapters: Chapter[]) => {
+    const combined = [...chapters, ...newChapters];
+    setChapters(combined);
+    await saveChapters(combined);
+    if (newChapters.length > 0) {
+      setActiveChapterId(newChapters[0].id);
+    }
+    triggerAutoSave();
+  };
+
+  if (isLoading || !book) {
     return (
-      <div className="h-screen w-screen bg-neutral-950 flex flex-col items-center justify-center text-neutral-400 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
-        <span className="text-sm font-medium">Opening FolioCraft Studio...</span>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-300 gap-3">
+        <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+        <span className="font-serif text-lg tracking-wide text-neutral-200">
+          Loading FolioCraft Studio...
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
-      {/* Top Bar Navigation */}
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500/30 selection:text-amber-200">
+      {/* Studio Header */}
       <Header
-        currentBook={currentBook}
-        allBooks={allBooks}
-        onSelectBook={handleSelectBook}
-        onNewBook={handleNewBook}
-        onOpenThemes={() => setIsThemesOpen(true)}
-        onOpenDetails={() => setIsDetailsOpen(true)}
-        onOpenExport={() => setIsExportOpen(true)}
+        book={book}
+        saveStatus={saveStatus}
+        isPreviewOpen={isPreviewOpen}
+        onTogglePreview={() => setIsPreviewOpen(!isPreviewOpen)}
+        onOpenStyleModal={() => setIsStyleModalOpen(true)}
+        onOpenBookDetailsModal={() => setIsBookDetailsModalOpen(true)}
+        onOpenExportModal={() => setIsExportModalOpen(true)}
+        onSaveManual={handleSaveAll}
         totalWordCount={totalWordCount}
       />
 
-      {/* Main Studio Viewport (3-Pane Workspace) */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Left Pane: Book Organizer & Matter */}
+      {/* Main 3-Pane Workspace */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: Sidebar Navigation (Manuscript & Characters tabs) */}
         <SidebarNav
-          sections={sections}
-          activeSectionId={activeSectionId}
-          onSelectSection={setActiveSectionId}
-          onAddSection={handleAddSection}
-          onDeleteSection={handleDeleteSection}
-          onMoveSection={handleMoveSection}
-          onImportFile={handleImportFile}
+          chapters={chapters}
+          activeChapterId={activeChapterId}
+          onSelectChapter={setActiveChapterId}
+          onAddChapter={handleAddChapter}
+          onDeleteChapter={handleDeleteChapter}
+          onReorderChapter={handleReorderChapter}
+          characters={characters}
+          onOpenCharacterModal={handleOpenCharacterModal}
+          onDeleteCharacter={handleDeleteCharacter}
+          onInsertCharacterName={handleInsertCharacterName}
+          book={book}
+          onUpdateBookGoals={handleUpdateBookGoals}
+          onUpdateChapterTarget={handleUpdateChapterTarget}
         />
 
-        {/* Center Pane: Manuscript WYSIWYG Editor */}
-        {activeSection ? (
-          <EditorPane
-            section={activeSection}
-            book={currentBook}
-            onChangeSection={handleUpdateSection}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm">
-            Select or create a section to start writing.
-          </div>
-        )}
+        {/* Center: Rich WYSIWYG Editor Pane */}
+        <EditorPane
+          chapter={activeChapter}
+          onUpdateChapter={handleUpdateChapter}
+          characters={characters}
+          onOpenCharacterModal={handleOpenCharacterModal}
+        />
 
-        {/* Right Pane: Live Device & Print Spread Previewer */}
-        {activeSection && (
-          <DevicePreviewer
-            book={currentBook}
-            section={activeSection}
-            allSections={sections}
-            onSelectSection={setActiveSectionId}
+        {/* Right: Device Preview Simulator Pane */}
+        {isPreviewOpen && (
+          <PreviewPane
+            book={book}
+            chapters={chapters}
+            activeChapterId={activeChapterId}
+            onSelectChapter={setActiveChapterId}
+            onClose={() => setIsPreviewOpen(false)}
           />
         )}
-      </main>
+      </div>
 
-      {/* Themes & Styling Modal */}
-      <ThemeStyleModal
-        isOpen={isThemesOpen}
-        onClose={() => setIsThemesOpen(false)}
-        book={currentBook}
-        onUpdateBook={handleUpdateBook}
+      {/* Modals */}
+      <StyleModal
+        isOpen={isStyleModalOpen}
+        onClose={() => setIsStyleModalOpen(false)}
+        styleConfig={book.styleConfig || getDefaultStyleConfig('literary')}
+        onSaveStyle={handleSaveStyle}
       />
 
-      {/* Book Details & Trim Size Modal */}
       <BookDetailsModal
-        isOpen={isDetailsOpen}
-        onClose={() => setIsDetailsOpen(false)}
-        book={currentBook}
-        onUpdateBook={handleUpdateBook}
+        isOpen={isBookDetailsModalOpen}
+        onClose={() => setIsBookDetailsModalOpen(false)}
+        book={book}
+        onSaveBook={handleSaveBookDetails}
       />
 
-      {/* Export & Publishing Center Modal */}
       <ExportModal
-        isOpen={isExportOpen}
-        onClose={() => setIsExportOpen(false)}
-        book={currentBook}
-        sections={sections}
-        onProjectRestored={async (restored) => {
-          const books = await getAllBooks();
-          setAllBooks(books);
-          setCurrentBook(restored);
-          const secs = await getSections(restored.id);
-          setSections(secs);
-          if (secs.length > 0) setActiveSectionId(secs[0].id);
-        }}
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        book={book}
+        chapters={chapters}
+        characters={characters}
+        onImportBackup={handleImportBackup}
+        onImportChapters={handleImportChapters}
+      />
+
+      <CharacterModal
+        isOpen={isCharacterModalOpen}
+        onClose={() => setIsCharacterModalOpen(false)}
+        character={selectedCharacterForModal}
+        bookId={book.id}
+        onSave={handleSaveCharacter}
       />
     </div>
   );

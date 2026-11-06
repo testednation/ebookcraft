@@ -1,6 +1,8 @@
 {
   "name": "FolioCraft Ebook Creator & Publisher",
-  "description": "Offline-first ebook creator and book publisher matching Atticus and Vellum with EPUB 3 export, print-ready PDF formatting, multi-genre book styling, and live device preview.",
+  "description": "Professional offline-first book formatting and publishing studio matching Atticus and Vellum with multi-genre styling, character profile management, live preview, EPUB3, and print-ready PDF export.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

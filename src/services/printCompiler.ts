@@ -1,286 +1,172 @@
-import { BookProject, BookSection, TRIM_SIZES } from '../types/book';
-import { getThemeById } from './themes';
-import { getOrnamentSvg } from './ornaments';
-import { downloadBlob } from './epubCompiler';
+import { Book, Chapter } from '../types/book';
+import { formatChapterHtml } from './formattingEngine';
+import { getDefaultStyleConfig } from './themes';
 
-export function generatePrintHtml(book: BookProject, sections: BookSection[]): string {
-  const trim = TRIM_SIZES.find((t) => t.id === book.trimSize) || TRIM_SIZES[2];
-  const theme = getThemeById(book.themeId);
-  const ornamentSvg = getOrnamentSvg(book.ornamentKey || theme.ornamentKey);
+export function openPrintDialog(book: Book, chapters: Chapter[]): void {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Please allow popups to open the print preview.');
+    return;
+  }
 
-  const sectionsHtml = sections
-    .map((section, idx) => {
-      const dropCapClass = section.dropCap ? 'print-drop-cap' : '';
+  const style = {
+    ...getDefaultStyleConfig('literary'),
+    ...(book.styleConfig || {}),
+  };
+  const trimDimensions = {
+    '5x8': '5in 8in',
+    '5.5x8.5': '5.5in 8.5in',
+    '6x9': '6in 9in',
+  }[style.trimSize || '5.5x8.5'];
+
+  const formattedChaptersHtml = chapters
+    .map((ch, idx) => {
+      const formattedContent = formatChapterHtml(ch.content, style, ch.customOrnamentId);
       return `
-      <section class="book-page ${section.type === 'body' ? 'chapter-recto-start' : 'matter-page'}">
-        ${
-          section.subtype !== 'title-page'
-            ? `
+        <article class="print-chapter ${ch.pageBreakBefore ? 'break-before' : ''}" id="chapter-${idx}">
           <header class="chapter-header">
-            <h1 class="chapter-title">${section.title}</h1>
-            ${section.subtitle ? `<h2 class="chapter-subtitle">${section.subtitle}</h2>` : ''}
-            ${section.epigraph ? `<blockquote class="chapter-epigraph">${section.epigraph}</blockquote>` : ''}
-            <div class="header-divider">${ornamentSvg}</div>
+            <h1 class="chapter-title">${ch.title}</h1>
+            ${ch.subtitle ? `<h2 class="chapter-subtitle">${ch.subtitle}</h2>` : ''}
           </header>
-        `
-            : ''
-        }
-        <div class="chapter-content ${dropCapClass}">
-          ${section.content}
-        </div>
-      </section>
+          <div class="chapter-body">
+            ${formattedContent}
+          </div>
+        </article>
       `;
     })
     .join('\n');
 
-  return `<!DOCTYPE html>
-<html lang="${book.language || 'en'}">
+  const html = `<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8"/>
-  <title>${book.title} — Print Edition</title>
+  <meta charset="utf-8">
+  <title>${book.title} — Print Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;600&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;600&display=swap');
-
     @page {
-      size: ${trim.widthInches}in ${trim.heightInches}in;
-      margin: 0.75in 0.6in 0.75in 0.85in; /* Gutter margin for binding */
+      size: ${trimDimensions};
+      margin-top: 0.75in;
+      margin-bottom: 0.75in;
+      margin-left: 0.75in;
+      margin-right: 0.625in;
       @bottom-center {
         content: counter(page);
-        font-family: ${book.bodyFont};
+        font-family: "${style.bodyFont}", serif;
         font-size: 9pt;
       }
     }
-
     @page :left {
-      margin-left: 0.6in;
-      margin-right: 0.85in;
-      @top-center {
-        content: "${book.title}";
-        font-family: ${book.headingFont};
-        font-size: 8.5pt;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
+      margin-left: 0.625in;
+      margin-right: 0.75in;
     }
-
-    @page :right {
-      margin-left: 0.85in;
-      margin-right: 0.6in;
-      @top-center {
-        content: "${book.author}";
-        font-family: ${book.headingFont};
-        font-size: 8.5pt;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
     body {
-      font-family: ${book.bodyFont};
-      font-size: ${book.baseFontSize}px;
-      line-height: ${book.lineSpacing};
-      color: #111;
+      font-family: "${style.bodyFont}", Georgia, serif;
+      font-size: ${style.fontSizePt}pt;
+      line-height: ${style.lineSpacing};
+      color: #000;
       background: #fff;
       margin: 0;
       padding: 0;
       text-rendering: optimizeLegibility;
-      font-feature-settings: "kern" 1, "liga" 1;
     }
-
-    .book-page {
+    .print-chapter {
       page-break-before: always;
       break-before: page;
     }
-
-    .chapter-recto-start {
-      page-break-before: right;
-      break-before: right;
-    }
-
     .chapter-header {
-      text-align: ${theme.headerAlignment};
-      margin-top: 1in;
-      margin-bottom: 2rem;
+      text-align: center;
+      margin-top: 1.5in;
+      margin-bottom: 1in;
     }
-
     .chapter-title {
-      font-family: ${book.headingFont};
-      font-size: 1.8rem;
+      font-family: "${style.headingFont}", Georgia, serif;
+      font-size: 1.75em;
       font-weight: 600;
       letter-spacing: 0.05em;
-      margin: 0 0 0.5rem 0;
-      text-transform: ${theme.chapterTitleTransform};
+      text-transform: uppercase;
+      margin: 0 0 0.25em 0;
     }
-
     .chapter-subtitle {
-      font-family: ${book.bodyFont};
-      font-size: 1.1rem;
-      font-weight: normal;
+      font-family: "${style.bodyFont}", Georgia, serif;
       font-style: italic;
+      font-size: 1em;
       color: #444;
-      margin: 0 0 1rem 0;
-    }
-
-    .chapter-epigraph {
-      font-style: italic;
-      font-size: 0.95rem;
-      margin: 1.5rem 10% 2rem 10%;
-      text-align: center;
-      color: #555;
-    }
-
-    .header-divider {
-      margin: 1.5rem 0;
-      opacity: 0.8;
-      text-align: ${theme.headerAlignment};
-    }
-
-    .header-divider svg {
-      display: inline-block;
-      max-width: 90px;
-      height: auto;
-    }
-
-    .chapter-content p {
       margin: 0;
-      text-indent: 1.4em;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: ${style.paragraphSpacingPt}pt;
+      text-indent: ${style.paragraphIndentEm}em;
       text-align: justify;
       hyphens: auto;
     }
-
-    .chapter-content p:first-of-type,
-    .chapter-content div + p {
-      text-indent: 0;
+    p:first-of-type, .no-indent {
+      text-indent: 0 !important;
     }
-
-    .print-drop-cap p:first-of-type::first-letter {
+    .has-dropcap .drop-cap-letter {
       float: left;
-      font-family: ${book.headingFont};
       font-size: 3.4em;
-      line-height: 0.8;
-      padding-top: 4px;
-      padding-right: 8px;
-      font-weight: 600;
-      color: #111;
+      line-height: 0.85;
+      padding-top: 2px;
+      padding-right: 6px;
+      font-family: "${style.headingFont}", serif;
+      font-weight: bold;
     }
-
     .folio-scene-break {
       text-align: center;
-      margin: 1.8rem 0;
+      margin: 1.5em 0;
     }
-
-    .folio-scene-break svg {
-      display: inline-block;
-      max-width: 80px;
-      height: auto;
+    .folio-page-break {
+      page-break-before: always;
+      break-before: page;
+      visibility: hidden;
+      height: 0;
+      margin: 0;
+      padding: 0;
     }
-
-    /* Screen preview framing */
-    @media screen {
-      body {
-        background: #27272a;
-        padding: 2rem;
-      }
-      .book-page {
-        width: ${trim.widthInches}in;
-        min-height: ${trim.heightInches}in;
-        background: white;
-        margin: 0 auto 2rem auto;
-        padding: 0.85in 0.75in;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    .no-print-toolbar {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: #18181b;
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 99999;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .no-print-toolbar button {
+      background: #f59e0b;
+      color: #000;
+      border: none;
+      padding: 6px 14px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    @media print {
+      .no-print-toolbar {
+        display: none !important;
       }
     }
   </style>
 </head>
 <body>
-  ${sectionsHtml}
-  <script>
-    window.onload = function() {
-      // Auto trigger print if parameter ?print=true
-      if (window.location.search.indexOf('print=true') !== -1) {
-        setTimeout(function() { window.print(); }, 400);
-      }
-    };
-  </script>
+  <div class="no-print-toolbar">
+    <span>Print or Save to PDF (Trim: ${style.trimSize})</span>
+    <button onclick="window.print()">Print Document</button>
+  </div>
+  ${formattedChaptersHtml}
 </body>
 </html>`;
-}
 
-export function openPrintDialog(book: BookProject, sections: BookSection[]): void {
-  const html = generatePrintHtml(book, sections);
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('Please allow popups to open the print dialog.');
-    return;
-  }
-  printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 600);
-}
-
-export function exportHtmlFile(book: BookProject, sections: BookSection[]): void {
-  const html = generatePrintHtml(book, sections);
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const filename = `${book.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Formatted_Print.html`;
-  downloadBlob(blob, filename);
-}
-
-export function exportMarkdownFile(book: BookProject, sections: BookSection[]): void {
-  let md = `---
-title: "${book.title}"
-${book.subtitle ? `subtitle: "${book.subtitle}"\n` : ''}author: "${book.author}"
-publisher: "${book.publisher || ''}"
-isbn: "${book.isbnPrint || book.isbnEpub || ''}"
-language: "${book.language}"
-date: "${new Date().toISOString().split('T')[0]}"
----
-
-# ${book.title}
-${book.subtitle ? `*${book.subtitle}*\n` : ''}
-By ${book.author}
-
----
-
-`;
-
-  for (const sec of sections) {
-    md += `## ${sec.title}\n`;
-    if (sec.subtitle) md += `*${sec.subtitle}*\n\n`;
-    if (sec.epigraph) md += `> ${sec.epigraph}\n\n`;
-
-    // Convert basic HTML to markdown
-    const textContent = sec.content
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '\n### $1\n\n')
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '\n#### $1\n\n')
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '\n##### $1\n\n')
-      .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '\n> $1\n\n')
-      .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
-      .replace(/<div class="folio-scene-break"[^>]*>.*?<\/div>/gi, '\n* * *\n\n')
-      .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-      .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-      .replace(/<em>(.*?)<\/em>/gi, '*$1*')
-      .replace(/<i>(.*?)<\/i>/gi, '*$1*')
-      .replace(/<br\s*[\/]?>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
-
-    md += `${textContent}\n\n---\n\n`;
-  }
-
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-  const filename = `${book.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Manuscript.md`;
-  downloadBlob(blob, filename);
 }

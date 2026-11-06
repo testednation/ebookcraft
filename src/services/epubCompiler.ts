@@ -1,184 +1,149 @@
 import JSZip from 'jszip';
-import { BookProject, BookSection } from '../types/book';
-import { getThemeById } from './themes';
-import { getOrnamentSvg } from './ornaments';
+import { Book, Chapter } from '../types/book';
+import { formatChapterHtml } from './formattingEngine';
+import { getDefaultStyleConfig } from './themes';
 
-function escapeXml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function cleanHtmlToXhtml(html: string): string {
-  let cleaned = html
-    // Self-close void elements
-    .replace(/<hr([^>]*)>/gi, '<hr$1/>')
-    .replace(/<br([^>]*)>/gi, '<br$1/>')
-    .replace(/<img([^>]*)(?<!\/)>/gi, '<img$1/>')
-    // Remove unsupported attributes
-    .replace(/contenteditable="[^"]*"/gi, '')
-    .replace(/spellcheck="[^"]*"/gi, '');
-
-  return cleaned;
-}
-
-export async function generateEpub(book: BookProject, sections: BookSection[]): Promise<Blob> {
+export async function generateEpubBlob(book: Book, chapters: Chapter[]): Promise<Blob> {
   const zip = new JSZip();
-  const theme = getThemeById(book.themeId);
-  const bookUuid = `urn:uuid:${book.id}-${book.createdAt}`;
-  const modifiedDate = new Date(book.updatedAt || Date.now()).toISOString().split('.')[0] + 'Z';
 
-  // 1. mimetype (MUST be uncompressed)
+  // 1. mimetype (MUST be first, uncompressed)
   zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
 
   // 2. META-INF/container.xml
-  const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
+  zip.folder('META-INF')?.file(
+    'container.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
     <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
-</container>`;
-  zip.file('META-INF/container.xml', containerXml);
+</container>`
+  );
 
-  // 3. OEBPS/styles.css
-  const stylesCss = `/* FolioCraft Generated EPUB Stylesheet */
+  const oebps = zip.folder('OEBPS');
+  if (!oebps) throw new Error('Failed to create OEBPS folder in EPUB');
+
+  // Stylesheet
+  const style = {
+    ...getDefaultStyleConfig('literary'),
+    ...(book.styleConfig || {}),
+  };
+  const css = `
+@charset "utf-8";
 body {
-  font-family: serif;
+  font-family: "${style.bodyFont}", Georgia, serif;
+  font-size: ${style.fontSizePt}pt;
+  line-height: ${style.lineSpacing};
+  color: #1a1a1a;
+  background-color: #ffffff;
   margin: 5%;
-  line-height: ${book.lineSpacing};
-  font-size: 1em;
   text-align: justify;
 }
-
-h1, h2, h3, h4 {
-  font-family: sans-serif;
-  text-align: ${theme.headerAlignment};
+h1, h2, h3 {
+  font-family: "${style.headingFont}", Georgia, serif;
+  text-align: center;
   font-weight: normal;
-  margin-top: 2em;
-  margin-bottom: 0.5em;
-  text-transform: ${theme.chapterTitleTransform};
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
 }
-
-h1.chapter-title {
-  font-size: 1.8em;
-  letter-spacing: 0.05em;
+h1 {
+  font-size: 2em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
-
-p.chapter-subtitle {
-  text-align: ${theme.headerAlignment};
-  font-style: italic;
-  margin-bottom: 2em;
-  opacity: 0.8;
-}
-
-p.chapter-epigraph {
+.subtitle {
   text-align: center;
   font-style: italic;
-  font-size: 0.9em;
-  margin: 1.5em 15% 2.5em 15%;
+  font-size: 1.1em;
+  color: #555;
+  margin-top: -0.5em;
+  margin-bottom: 1.5em;
 }
-
 p {
-  margin: 0;
-  text-indent: 1.5em;
+  margin-top: 0;
+  margin-bottom: ${style.paragraphSpacingPt}pt;
+  text-indent: ${style.paragraphIndentEm}em;
 }
-
-p.first-p, p.no-indent {
-  text-indent: 0;
+p:first-of-type, .no-indent {
+  text-indent: 0 !important;
 }
-
-/* Drop Caps */
-.drop-cap:first-letter {
+.has-dropcap .drop-cap-letter {
   float: left;
-  font-size: 3.2em;
+  font-size: 3.5em;
   line-height: 0.8;
-  padding-right: 0.15em;
-  padding-top: 0.05em;
+  padding-top: 4px;
+  padding-right: 8px;
+  font-family: "${style.headingFont}", serif;
   font-weight: bold;
 }
-
 .folio-scene-break {
   text-align: center;
   margin: 2em 0;
+  font-size: 1.2em;
+  letter-spacing: 0.3em;
+  color: #666;
 }
-
-.folio-scene-break svg {
-  display: inline-block;
-  max-width: 100px;
-  height: auto;
+.folio-page-break {
+  page-break-before: always;
+  break-before: page;
 }
+.text-center { text-align: center; }
+.italic { font-style: italic; }
+.uppercase { text-transform: uppercase; }
+  `;
+  oebps.file('styles.css', css);
 
-blockquote {
-  margin: 1.5em 10%;
-  font-style: italic;
-}
-`;
-  zip.file('OEBPS/styles.css', stylesCss);
-
-  // 4. Chapter XHTML files
+  // Generate Chapter XHTML files
   const manifestItems: string[] = [
+    `<item id="css" href="styles.css" media-type="text/css"/>`,
     `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
     `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`,
-    `<item id="styles" href="styles.css" media-type="text/css"/>`,
   ];
   const spineItems: string[] = [];
-  const ncxNavPoints: string[] = [];
   const tocNavList: string[] = [];
+  const ncxNavPoints: string[] = [];
 
-  let playOrder = 1;
+  chapters.forEach((ch, index) => {
+    const filename = `chapter_${index + 1}.xhtml`;
+    const formattedBody = formatChapterHtml(ch.content, style, ch.customOrnamentId);
 
-  sections.forEach((section, index) => {
-    const fileId = `sec_${index + 1}`;
-    const fileName = `section_${index + 1}.xhtml`;
-
-    manifestItems.push(`<item id="${fileId}" href="${fileName}" media-type="application/xhtml+xml"/>`);
-    spineItems.push(`<itemref idref="${fileId}"/>`);
-
-    if (section.includeInToc) {
-      ncxNavPoints.push(`
-    <navPoint id="navPoint-${playOrder}" playOrder="${playOrder}">
-      <navLabel><text>${escapeXml(section.title)}</text></navLabel>
-      <content src="${fileName}"/>
-    </navPoint>`);
-      tocNavList.push(`<li><a href="${fileName}">${escapeXml(section.title)}</a></li>`);
-      playOrder++;
-    }
-
-    const dropCapClass = section.dropCap ? 'drop-cap first-p' : 'first-p';
-    let formattedContent = cleanHtmlToXhtml(section.content);
-
-    // Apply drop cap class to first paragraph if enabled
-    if (section.dropCap) {
-      formattedContent = formattedContent.replace(/<p>/i, `<p class="${dropCapClass}">`);
-    }
-
-    const chapterHtml = `<?xml version="1.0" encoding="UTF-8"?>
+    const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${book.language || 'en'}">
 <head>
   <meta charset="utf-8"/>
-  <title>${escapeXml(section.title)}</title>
+  <title>${escapeXml(ch.title)}</title>
   <link rel="stylesheet" type="text/css" href="styles.css"/>
 </head>
-<body epub:type="${section.type === 'front' ? 'frontmatter' : section.type === 'back' ? 'backmatter' : 'bodymatter'}">
-  <section class="section-container">
-    ${section.subtype !== 'title-page' ? `<h1 class="chapter-title">${escapeXml(section.title)}</h1>` : ''}
-    ${section.subtitle ? `<p class="chapter-subtitle">${escapeXml(section.subtitle)}</p>` : ''}
-    ${section.epigraph ? `<p class="chapter-epigraph">${escapeXml(section.epigraph)}</p>` : ''}
-    <div class="chapter-body">
-      ${formattedContent}
-    </div>
-  </section>
+<body epub:type="${ch.type}">
+  <header>
+    <h1>${escapeXml(ch.title)}</h1>
+    ${ch.subtitle ? `<p class="subtitle">${escapeXml(ch.subtitle)}</p>` : ''}
+  </header>
+  <div class="chapter-content">
+    ${formattedBody}
+  </div>
 </body>
 </html>`;
 
-    zip.file(`OEBPS/${fileName}`, chapterHtml);
+    oebps.file(filename, xhtml);
+
+    const itemId = `ch_${index + 1}`;
+    manifestItems.push(`<item id="${itemId}" href="${filename}" media-type="application/xhtml+xml"/>`);
+    spineItems.push(`<itemref idref="${itemId}"/>`);
+
+    if (ch.includeInToc) {
+      tocNavList.push(`<li><a href="${filename}">${escapeXml(ch.title)}</a></li>`);
+      ncxNavPoints.push(`
+        <navPoint id="np_${index + 1}" playOrder="${index + 1}">
+          <navLabel><text>${escapeXml(ch.title)}</text></navLabel>
+          <content src="${filename}"/>
+        </navPoint>
+      `);
+    }
   });
 
-  // 5. OEBPS/nav.xhtml (EPUB 3 Nav Document)
+  // nav.xhtml (EPUB 3 Navigation)
   const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${book.language || 'en'}">
@@ -196,41 +161,36 @@ blockquote {
   </nav>
 </body>
 </html>`;
-  zip.file('OEBPS/nav.xhtml', navXhtml);
+  oebps.file('nav.xhtml', navXhtml);
 
-  // 6. OEBPS/toc.ncx (EPUB 2 / Legacy E-Readers Fallback)
+  // toc.ncx (EPUB 2 fallback for older ereaders)
   const tocNcx = `<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
-    <meta name="dtb:uid" content="${bookUuid}"/>
+    <meta name="dtb:uid" content="${book.isbn || book.id}"/>
     <meta name="dtb:depth" content="1"/>
     <meta name="dtb:totalPageCount" content="0"/>
     <meta name="dtb:maxPageNumber" content="0"/>
   </head>
-  <docTitle>
-    <text>${escapeXml(book.title)}</text>
-  </docTitle>
-  <docAuthor>
-    <text>${escapeXml(book.author)}</text>
-  </docAuthor>
+  <docTitle><text>${escapeXml(book.title)}</text></docTitle>
+  <docAuthor><text>${escapeXml(book.author)}</text></docAuthor>
   <navMap>
-    ${ncxNavPoints.join('')}
+    ${ncxNavPoints.join('\n')}
   </navMap>
 </ncx>`;
-  zip.file('OEBPS/toc.ncx', tocNcx);
+  oebps.file('toc.ncx', tocNcx);
 
-  // 7. OEBPS/content.opf
+  // content.opf
   const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="BookId">${bookUuid}</dc:identifier>
+    <dc:identifier id="BookId">${book.isbn || book.id}</dc:identifier>
     <dc:title>${escapeXml(book.title)}</dc:title>
     ${book.subtitle ? `<dc:description>${escapeXml(book.subtitle)}</dc:description>` : ''}
     <dc:creator>${escapeXml(book.author)}</dc:creator>
     <dc:language>${book.language || 'en'}</dc:language>
-    ${book.publisher ? `<dc:publisher>${escapeXml(book.publisher)}</dc:publisher>` : ''}
-    ${book.rightsStatement ? `<dc:rights>${escapeXml(book.rightsStatement)}</dc:rights>` : ''}
-    <meta property="dcterms:modified">${modifiedDate}</meta>
+    <dc:publisher>${escapeXml(book.publisher || 'FolioCraft')}</dc:publisher>
+    <meta property="dcterms:modified">${new Date().toISOString().replace(/\.[0-9]+Z$/, 'Z')}</meta>
   </metadata>
   <manifest>
     ${manifestItems.join('\n    ')}
@@ -239,23 +199,16 @@ blockquote {
     ${spineItems.join('\n    ')}
   </spine>
 </package>`;
-  zip.file('OEBPS/content.opf', contentOpf);
+  oebps.file('content.opf', contentOpf);
 
-  return await zip.generateAsync({
-    type: 'blob',
-    mimeType: 'application/epub+zip',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 9 },
-  });
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
 }
 
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+function escapeXml(unsafe: string): string {
+  return (unsafe || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }

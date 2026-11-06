@@ -1,98 +1,49 @@
 export interface OrnamentDefinition {
-  key: string;
+  id: string;
   name: string;
-  category: 'classic' | 'botanical' | 'minimal' | 'celestial';
-  svg: string;
+  genre: 'all' | 'literary' | 'fantasy' | 'modern' | 'nonfiction';
+  svg: string; // inline SVG string
 }
 
 export const ORNAMENTS: OrnamentDefinition[] = [
   {
-    key: 'fleuron',
+    id: 'none',
+    name: 'None / Plain',
+    genre: 'all',
+    svg: '',
+  },
+  {
+    id: 'fleuron',
     name: 'Classic Fleuron',
-    category: 'classic',
-    svg: `<svg viewBox="0 0 100 24" width="80" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M50 2C46 8 38 12 30 12C36 14 42 18 44 22C46 16 54 16 56 22C58 18 64 14 70 12C62 12 54 8 50 2Z" opacity="0.9"/>
-      <circle cx="50" cy="12" r="2.5"/>
-      <circle cx="20" cy="12" r="1.5"/>
-      <circle cx="80" cy="12" r="1.5"/>
-      <line x1="5" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1"/>
-      <line x1="84" y1="12" x2="95" y2="12" stroke="currentColor" stroke-width="1"/>
-    </svg>`,
+    genre: 'literary',
+    svg: `<svg viewBox="0 0 100 24" fill="currentColor" class="w-20 h-5 mx-auto opacity-70"><path d="M50 2 C44 8 40 14 30 14 C36 14 42 16 46 22 C48 18 52 18 54 22 C58 16 64 14 70 14 C60 14 56 8 50 2 Z M20 12 C25 12 28 14 30 17 C28 15 25 15 20 15 C15 15 12 17 10 19 C12 16 15 12 20 12 Z M80 12 C75 12 72 14 70 17 C72 15 75 15 80 15 C85 15 88 17 90 19 C88 16 85 12 80 12 Z"/></svg>`,
   },
   {
-    key: 'diamonds',
-    name: 'Diamond Asterism',
-    category: 'minimal',
-    svg: `<svg viewBox="0 0 100 20" width="70" height="16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="50,4 56,10 50,16 44,10" />
-      <polygon points="32,6 36,10 32,14 28,10" opacity="0.75" />
-      <polygon points="68,6 72,10 68,14 64,10" opacity="0.75" />
-      <line x1="10" y1="10" x2="24" y2="10" stroke="currentColor" stroke-width="0.75"/>
-      <line x1="76" y1="10" x2="90" y2="10" stroke="currentColor" stroke-width="0.75"/>
-    </svg>`,
+    id: 'flourish-ivy',
+    name: 'Fantasy Ivy Flourish',
+    genre: 'fantasy',
+    svg: `<svg viewBox="0 0 120 20" fill="currentColor" class="w-28 h-5 mx-auto opacity-75"><path d="M60 4 C50 1 40 12 30 10 C34 7 36 3 32 1 C28 -1 25 4 22 7 C18 10 12 9 6 10 C12 12 20 13 24 11 C28 9 32 15 42 15 C52 15 56 6 60 4 Z M60 4 C70 1 80 12 90 10 C86 7 84 3 88 1 C92 -1 95 4 98 7 C102 10 108 9 114 10 C108 12 100 13 96 11 C92 9 88 15 78 15 C68 15 64 6 60 4 Z"/></svg>`,
   },
   {
-    key: 'scroll',
-    name: 'Victorian Scroll',
-    category: 'classic',
-    svg: `<svg viewBox="0 0 120 24" width="96" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60 4C52 14 44 14 36 8C28 2 20 8 16 12C20 12 26 8 32 12C40 16 48 16 56 6L60 4Z"/>
-      <path d="M60 4C68 14 76 14 84 8C92 2 100 8 104 12C100 12 94 8 88 12C80 16 72 16 64 6L60 4Z"/>
-      <circle cx="60" cy="16" r="2"/>
-    </svg>`,
+    id: 'geometric-stars',
+    name: 'Celestial Diamond Stars',
+    genre: 'fantasy',
+    svg: `<svg viewBox="0 0 100 20" fill="currentColor" class="w-24 h-5 mx-auto opacity-75"><polygon points="50,2 53,8 59,10 53,12 50,18 47,12 41,10 47,8" /><polygon points="30,5 32,9 36,10 32,11 30,15 28,11 24,10 28,9" /><polygon points="70,5 72,9 76,10 72,11 70,15 68,11 64,10 68,9" /></svg>`,
   },
   {
-    key: 'stars',
-    name: 'Celestial Trio',
-    category: 'celestial',
-    svg: `<svg viewBox="0 0 100 20" width="75" height="16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M50 2L52.5 7.5L58 10L52.5 12.5L50 18L47.5 12.5L42 10L47.5 7.5Z"/>
-      <path d="M30 4.5L31.5 8L35 10L31.5 12L30 15.5L28.5 12L25 10L28.5 8Z" opacity="0.8"/>
-      <path d="M70 4.5L71.5 8L75 10L71.5 12L70 15.5L68.5 12L65 10L68.5 8Z" opacity="0.8"/>
-      <line x1="8" y1="10" x2="20" y2="10" stroke="currentColor" stroke-width="0.75"/>
-      <line x1="80" y1="10" x2="92" y2="10" stroke="currentColor" stroke-width="0.75"/>
-    </svg>`,
+    id: 'dashes',
+    name: 'Modern Rule & Diamond',
+    genre: 'modern',
+    svg: `<svg viewBox="0 0 120 16" fill="currentColor" class="w-24 h-4 mx-auto opacity-60"><rect x="10" y="7.5" width="40" height="1" /><polygon points="60,3 65,8 60,13 55,8" /><rect x="70" y="7.5" width="40" height="1" /></svg>`,
   },
   {
-    key: 'laurel',
-    name: 'Botanical Laurel',
-    category: 'botanical',
-    svg: `<svg viewBox="0 0 120 24" width="96" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60 12C50 10 40 6 30 12C36 10 44 14 50 14C54 14 58 13 60 12Z"/>
-      <path d="M60 12C70 10 80 6 90 12C84 10 76 14 70 14C66 14 62 13 60 12Z"/>
-      <ellipse cx="44" cy="7" rx="3.5" ry="2" transform="rotate(-25 44 7)"/>
-      <ellipse cx="76" cy="7" rx="3.5" ry="2" transform="rotate(25 76 7)"/>
-      <circle cx="60" cy="8" r="2.5"/>
-    </svg>`,
-  },
-  {
-    key: 'feather',
-    name: 'Author Quill',
-    category: 'classic',
-    svg: `<svg viewBox="0 0 120 24" width="96" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20 18C45 15 70 8 100 4C90 10 75 16 55 18C45 19 32 19 20 18Z"/>
-      <line x1="15" y1="19" x2="105" y2="4" stroke="currentColor" stroke-width="1"/>
-      <circle cx="60" cy="18" r="1.5"/>
-    </svg>`,
-  },
-  {
-    key: 'lines',
-    name: 'Modern Bar & Pip',
-    category: 'minimal',
-    svg: `<svg viewBox="0 0 100 16" width="70" height="12" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <line x1="10" y1="8" x2="42" y2="8" stroke="currentColor" stroke-width="1.25"/>
-      <rect x="47" y="5" width="6" height="6" rx="1"/>
-      <line x1="58" y1="8" x2="90" y2="8" stroke="currentColor" stroke-width="1.25"/>
-    </svg>`,
+    id: 'minimal-dots',
+    name: 'Minimal Asterisks',
+    genre: 'nonfiction',
+    svg: `<svg viewBox="0 0 80 16" fill="currentColor" class="w-16 h-4 mx-auto opacity-50"><circle cx="20" cy="8" r="2"/><circle cx="40" cy="8" r="2.5"/><circle cx="60" cy="8" r="2"/></svg>`,
   },
 ];
 
-export function getOrnamentSvg(key: string): string {
-  const found = ORNAMENTS.find((o) => o.key === key);
-  return found ? found.svg : ORNAMENTS[0].svg;
-}
-
-export function createSceneBreakHtml(ornamentKey: string): string {
-  const svg = getOrnamentSvg(ornamentKey);
-  return `<div class="folio-scene-break" data-ornament="${ornamentKey}" style="text-align: center; margin: 2rem 0; opacity: 0.85; user-select: none;">${svg}</div>`;
-}
+export const getOrnamentById = (id: string): OrnamentDefinition => {
+  return ORNAMENTS.find((o) => o.id === id) || ORNAMENTS[0];
+};
