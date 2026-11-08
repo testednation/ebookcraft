@@ -10,7 +10,7 @@ const SHORTCUTS = [
   { key: 'Ctrl + S / ⌘ + S', desc: 'Save chapter and manuscript changes immediately' },
   { key: 'Ctrl + N / ⌘ + N', desc: 'Add a new chapter to the current manuscript' },
   { key: 'Ctrl + P / ⌘ + P', desc: 'Toggle between Editor and Live Device Preview' },
-  { key: 'Ctrl + F / ⌘ + F', desc: 'Toggle Distraction-Free Typewriter Focus Mode' },
+  { key: 'Ctrl + Shift + F / ⌘ + Shift + F', desc: 'Toggle Distraction-Free Typewriter Focus Mode (also Ctrl+F)' },
   { key: 'Ctrl + B / ⌘ + B', desc: 'Bold selected prose text' },
   { key: 'Ctrl + I / ⌘ + I', desc: 'Italicize selected prose text' },
   { key: 'Ctrl + K / ⌘ + K', desc: 'Open Keyboard Shortcuts cheat sheet' },

@@ -23,6 +23,9 @@ export const BookDetailsModal: React.FC<BookDetailsModalProps> = ({ isOpen, onCl
   );
   const [targetWordCount, setTargetWordCount] = useState<number>(book.targetWordCount || 50000);
   const [dailyWordGoal, setDailyWordGoal] = useState<number>(book.dailyWordGoal || 1000);
+  const [direction, setDirection] = useState<'ltr' | 'rtl'>(
+    book.direction || book.styleConfig?.direction || 'ltr'
+  );
 
   if (!isOpen) return null;
 
@@ -36,6 +39,7 @@ export const BookDetailsModal: React.FC<BookDetailsModalProps> = ({ isOpen, onCl
       isbn,
       description,
       language,
+      direction,
       genre,
       autoSaveFrequency,
       targetWordCount: Number(targetWordCount) || 50000,
@@ -134,6 +138,46 @@ export const BookDetailsModal: React.FC<BookDetailsModalProps> = ({ isOpen, onCl
                 placeholder="978-..."
                 className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-stone-400 mb-1">Language Code</label>
+              <input
+                type="text"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                placeholder="en, he, ar, fa, ur, es, fr"
+                className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-400 mb-1">Reading Direction</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDirection('ltr')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-medium border text-center transition-all ${
+                    direction === 'ltr'
+                      ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 font-semibold'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  LTR (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDirection('rtl')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-medium border text-center transition-all ${
+                    direction === 'rtl'
+                      ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 font-semibold'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  RTL (Hebrew/Arabic)
+                </button>
+              </div>
             </div>
           </div>
 

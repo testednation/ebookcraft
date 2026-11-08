@@ -5,6 +5,7 @@ import {
   estimatePageCountFromWords,
   TRIM_DIMENSIONS,
 } from '../services/spineCalculator';
+import { detectDuplicatesAcrossChapters } from '../services/duplicateDetector';
 import {
   X,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   ArrowRight,
   Info,
+  Copy,
 } from 'lucide-react';
 
 interface PreflightModalProps {
@@ -29,7 +31,7 @@ interface PreflightModalProps {
 
 interface PreflightCheckItem {
   id: string;
-  category: 'Spine & Cover' | 'Pagination' | 'Margins & Gutter' | 'Typography';
+  category: 'Spine & Cover' | 'Pagination' | 'Margins & Gutter' | 'Typography' | 'Manuscript Integrity';
   title: string;
   status: 'pass' | 'warning' | 'info';
   description: string;
@@ -174,6 +176,27 @@ export const PreflightModal: React.FC<PreflightModalProps> = ({
         title: `Signature Trailing Pages (${4 - signatureRem} blank)`,
         status: 'info',
         description: `Printers bind in 4-page signatures. KDP will append ${4 - signatureRem} blank end sheets automatically.`,
+      });
+    }
+
+    // 7. Duplicate Paragraphs Audit
+    const dupReport = detectDuplicatesAcrossChapters(chapters);
+    if (dupReport.totalDuplicates === 0) {
+      list.push({
+        id: 'no-duplicate-paragraphs',
+        category: 'Manuscript Integrity',
+        title: 'Zero Duplicate Paragraphs Detected',
+        status: 'pass',
+        description: `Scanned all ${chapters.length} sections. Every paragraph block is unique with no redundant duplicate text blocks.`,
+      });
+    } else {
+      list.push({
+        id: 'duplicate-paragraphs-found',
+        category: 'Manuscript Integrity',
+        title: `${dupReport.totalDuplicates} Duplicate Paragraph Groups Detected`,
+        status: 'warning',
+        description: `Found ${dupReport.totalRedundantParagraphs} repeated duplicate paragraphs (~${dupReport.totalRedundantWords.toLocaleString()} redundant words). Review repeated text to prevent copy-paste errors.`,
+        recommendation: 'Use the Duplicates detector in the Editor to inspect and auto-deduplicate.',
       });
     }
 

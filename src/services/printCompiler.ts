@@ -77,8 +77,10 @@ export function compilePrintReadyHtml(book: Book, chapters: Chapter[]): string {
     })
     .join('\n');
 
+  const isRtl = book?.direction === 'rtl' || style.direction === 'rtl';
+
   return `<!DOCTYPE html>
-<html>
+<html lang="${book.language || 'en'}" dir="${isRtl ? 'rtl' : 'ltr'}">
 <head>
   <meta charset="utf-8">
   <title>${book.title} — Print Preview</title>
@@ -110,6 +112,8 @@ export function compilePrintReadyHtml(book: Book, chapters: Chapter[]): string {
       background: #fff;
       margin: 0;
       padding: 0;
+      direction: ${isRtl ? 'rtl' : 'ltr'};
+      text-align: ${isRtl ? 'right' : 'justify'};
       text-rendering: optimizeLegibility;
     }
     .print-chapter {
@@ -178,11 +182,11 @@ export function compilePrintReadyHtml(book: Book, chapters: Chapter[]): string {
       text-indent: 0 !important;
     }
     .has-dropcap .drop-cap-letter {
-      float: left;
+      float: ${isRtl ? 'right' : 'left'};
       font-size: 3.4em;
       line-height: 0.85;
       padding-top: 2px;
-      padding-right: 6px;
+      padding-${isRtl ? 'left' : 'right'}: 6px;
       font-family: "${style.headingFont}", serif;
       font-weight: bold;
     }

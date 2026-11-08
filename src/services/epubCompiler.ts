@@ -52,6 +52,8 @@ export async function generateEpubBlob(book: Book, chapters: Chapter[]): Promise
 </container>`;
   zip.file('META-INF/container.xml', containerXml);
 
+  const isRtl = book.direction === 'rtl' || book.styleConfig?.direction === 'rtl';
+
   // 3. OEBPS/styles.css
   const styles = `
 @charset "utf-8";
@@ -60,7 +62,8 @@ body {
   font-size: 1.05em;
   line-height: 1.6;
   margin: 5%;
-  text-align: justify;
+  direction: ${isRtl ? 'rtl' : 'ltr'};
+  text-align: ${isRtl ? 'right' : 'justify'};
   color: #1a1a1a;
 }
 
@@ -95,11 +98,11 @@ p.first, .no-indent {
 }
 
 .drop-cap {
-  float: left;
+  float: ${isRtl ? 'right' : 'left'};
   font-size: 3.4em;
   line-height: 0.85;
   margin-top: 0.1em;
-  margin-right: 0.12em;
+  margin-${isRtl ? 'left' : 'right'}: 0.12em;
   font-family: serif;
 }
 
@@ -233,7 +236,7 @@ aside[epub\\:type~="footnote"] {
 
     const xhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en" lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${escapeXml(book.language || 'en')}" lang="${escapeXml(book.language || 'en')}" dir="${isRtl ? 'rtl' : 'ltr'}">
 <head>
   <title>${escapeXml(ch.title)} - ${escapeXml(book.title)}</title>
   <link rel="stylesheet" type="text/css" href="styles.css"/>
@@ -280,7 +283,7 @@ aside[epub\\:type~="footnote"] {
   <manifest>
     ${manifestItems.join('\n    ')}
   </manifest>
-  <spine>
+  <spine page-progression-direction="${isRtl ? 'rtl' : 'default'}">
     ${spineItems.join('\n    ')}
   </spine>
 </package>`;

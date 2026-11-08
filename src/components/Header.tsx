@@ -1,5 +1,6 @@
 import React from 'react';
 import { Book } from '../types/book';
+import { FocusTimer } from './FocusTimer';
 import {
   Feather,
   Sliders,
@@ -14,6 +15,9 @@ import {
   Users,
   Layers,
   ShieldCheck,
+  TrendingUp,
+  Upload,
+  Wand2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -32,6 +36,9 @@ interface HeaderProps {
   onOpenCharacters: () => void;
   onOpenCoverWrap: () => void;
   onOpenPreflight: () => void;
+  onOpenWritingVelocity: () => void;
+  onOpenImportModal: () => void;
+  onOpenDocumentCleaner: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,7 +57,13 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCharacters,
   onOpenCoverWrap,
   onOpenPreflight,
+  onOpenWritingVelocity,
+  onOpenImportModal,
+  onOpenDocumentCleaner,
 }) => {
+  // Estimated reading time at average adult reading speed of 200 words per minute
+  const readingTimeMinutes = totalWords > 0 ? Math.ceil(totalWords / 200) : 0;
+
   return (
     <header className="h-14 border-b border-stone-800 bg-stone-950 px-4 flex items-center justify-between shrink-0 select-none z-20">
       {/* Left: Branding & Manuscript Title */}
@@ -76,17 +89,32 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenBookDetails}
           className="text-left px-2 py-1 rounded-lg hover:bg-stone-900 transition-colors group flex items-center gap-2 max-w-[240px] lg:max-w-xs truncate"
-          title="Click to edit Book Details & Goals"
+          title={`Click to edit Book Details & Goals (${readingTimeMinutes} min estimated reading time)`}
         >
           <div className="truncate">
             <div className="text-xs font-serif font-semibold text-stone-200 group-hover:text-amber-400 transition-colors truncate">
               {book.title || 'Untitled Book'}
             </div>
-            <div className="text-[10px] text-stone-500 truncate">
-              by {book.author || 'Anonymous'} &bull; {totalWords.toLocaleString()} words
+            <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
+              <span>by {book.author || 'Anonymous'}</span>
+              <span>&bull;</span>
+              <span>{totalWords.toLocaleString()} words</span>
+              <span>&bull;</span>
+              <span className="text-amber-400/90 font-medium">~{readingTimeMinutes}m read</span>
             </div>
           </div>
         </button>
+
+        {/* Reading Time Badge */}
+        <div
+          className="hidden xl:flex items-center gap-1.5 text-[11px] text-stone-400 bg-stone-900/80 border border-stone-800 px-2.5 py-1 rounded-lg"
+          title={`Estimated reading time: ${readingTimeMinutes} minutes (at 200 words per minute)`}
+        >
+          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-medium text-stone-300">
+            {readingTimeMinutes} min read
+          </span>
+        </div>
       </div>
 
       {/* Center: Save Status & Phase 2 Roadmap Badge */}
@@ -141,6 +169,36 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden xl:inline text-xs">Pre-Flight</span>
         </button>
 
+        {/* Import DOCX Manuscript */}
+        <button
+          onClick={onOpenImportModal}
+          className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Import DOCX, TXT, or Markdown Manuscript"
+        >
+          <Upload className="w-4 h-4 text-emerald-400" />
+          <span className="hidden xl:inline text-xs">Import DOCX</span>
+        </button>
+
+        {/* Clean Document (Typographical Scrub) */}
+        <button
+          onClick={onOpenDocumentCleaner}
+          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Clean Document (Typographical scrub, smart quotes, em-dashes)"
+        >
+          <Wand2 className="w-4 h-4 text-amber-400" />
+          <span className="hidden xl:inline text-xs">Clean Doc</span>
+        </button>
+
+        {/* Writing Velocity (Recharts Dashboard) */}
+        <button
+          onClick={onOpenWritingVelocity}
+          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+          title="Writing Velocity Dashboard & 30-Day Analytics"
+        >
+          <TrendingUp className="w-4 h-4 text-amber-400" />
+          <span className="hidden xl:inline text-xs">Velocity</span>
+        </button>
+
         {/* Characters Bible Drawer button */}
         <button
           onClick={onOpenCharacters}
@@ -151,6 +209,9 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden lg:inline text-xs">Characters</span>
         </button>
 
+        {/* Focus Session Timer (Writing Sprint) */}
+        <FocusTimer focusMode={focusMode} onToggleFocusMode={onToggleFocusMode} />
+
         {/* Focus Mode Toggle */}
         <button
           onClick={onToggleFocusMode}
@@ -159,7 +220,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'bg-amber-500 text-stone-950 font-semibold'
               : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
           }`}
-          title="Focus Mode (Distraction-Free Typewriter)"
+          title="Focus Mode (Ctrl+Shift+F or Ctrl+F)"
         >
           {focusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           <span className="hidden lg:inline text-xs">{focusMode ? 'Exit Focus' : 'Focus'}</span>

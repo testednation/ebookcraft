@@ -39,6 +39,7 @@ export interface Chapter {
   headerImagePlacement?: 'banner' | 'full-bleed' | 'ornament';
   includeInToc: boolean;
   pageBreakBefore: boolean;
+  direction?: 'ltr' | 'rtl'; // RTL writing direction support (Hebrew, Arabic, Persian, Urdu)
   footnotes?: FootnoteItem[];
 }
 
@@ -88,6 +89,7 @@ export interface StyleConfig {
   paperStock?: PaperStock;
   rectoChapterOpening?: boolean; // Chapters begin on odd (right-hand) page
   hyphenation?: boolean;
+  direction?: 'ltr' | 'rtl'; // Global reading direction (LTR or RTL)
   headerBannerStyle?: 'none' | 'botanical' | 'celestial' | 'geometric' | 'custom';
   headerBannerImage?: string;
 }
@@ -115,6 +117,12 @@ export interface CoverWrapConfig {
   accentColor: string; // hex
 }
 
+export interface DailyWordHistoryEntry {
+  date: string; // YYYY-MM-DD
+  wordsWritten: number; // net words written on that date
+  totalWords: number; // cumulative total manuscript word count on that date
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -126,6 +134,7 @@ export interface Book {
   coverImage?: string; // Data URL or object URL
   coverWrap?: CoverWrapConfig; // Complete 360 wrap specs (Phase 3)
   language: string;
+  direction?: 'ltr' | 'rtl'; // Book reading direction ('ltr' or 'rtl')
   genre: string;
   styleConfig: StyleConfig;
   autoSaveFrequency: AutoSaveFrequency;
@@ -133,6 +142,7 @@ export interface Book {
   dailyWordGoal?: number; // Daily writing target (e.g. 1,000 words)
   dailyBaselineWords?: number; // Starting word count at start of today's date
   dailyBaselineDate?: string; // YYYY-MM-DD for daily progress calculation
+  writingHistory?: DailyWordHistoryEntry[]; // 30-day word count history (Recharts writing velocity)
   createdAt: number;
   updatedAt: number;
 }

@@ -1,26 +1,66 @@
 import JSZip from 'jszip';
 import { Chapter, SectionType } from '../types/book';
+import {
+  detectDuplicatesAcrossChapters,
+  DuplicateReport,
+  stripHtml,
+} from './duplicateDetector';
 
 export interface ImportResult {
   bookTitle?: string;
   chapters: Omit<Chapter, 'id' | 'bookId'>[];
   detectedWordCount: number;
+  duplicateReport: DuplicateReport;
+  fileName: string;
+  fileSize: number;
+}
+
+interface ParsedParagraph {
+  text: string;
+  html: string;
+  isHeading: boolean;
+  isPart: boolean;
+  headingText?: string;
+  isSceneBreak?: boolean;
 }
 
 export async function importManuscriptFile(file: File): Promise<ImportResult> {
   const extension = file.name.split('.').pop()?.toLowerCase();
 
+  let result: Omit<ImportResult, 'duplicateReport' | 'fileName' | 'fileSize'>;
+
   if (extension === 'docx') {
-    return await importDocxFile(file);
+    result = await importDocxFile(file);
   } else if (extension === 'txt' || extension === 'md') {
-    return await importTextOrMarkdownFile(file);
+    result = await importTextOrMarkdownFile(file);
   } else {
     throw new Error(`Unsupported file type: .${extension}. Please upload a .docx, .txt, or .md file.`);
   }
+
+  // Convert chapters to dummy format to run duplicate detector across imported chapters
+  const dummyChapters: Chapter[] = result.chapters.map((ch, idx) => ({
+    ...ch,
+    id: `temp_import_${idx}`,
+    bookId: 'temp_import_book',
+  }));
+
+  const duplicateReport = detectDuplicatesAcrossChapters(dummyChapters);
+
+  return {
+    ...result,
+    duplicateReport,
+    fileName: file.name,
+    fileSize: file.size,
+  };
 }
 
-// DOCX parsing via JSZip
-async function importDocxFile(file: File): Promise<ImportResult> {
+/**
+ * Advanced DOCX parser with XML run parsing, formatting preservation (bold, italic, underline),
+ * heading hierarchy detection, and scene break recognition.
+ */
+async function importDocxFile(
+  file: File
+): Promise<Omit<ImportResult, 'duplicateReport' | 'fileName' | 'fileSize'>> {
   const zip = await JSZip.loadAsync(file);
   const docXmlFile = zip.file('word/document.xml');
   if (!docXmlFile) {
@@ -32,76 +72,164 @@ async function importDocxFile(file: File): Promise<ImportResult> {
   const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
 
   const pNodes = xmlDoc.getElementsByTagName('w:p');
-  const paragraphs: { text: string; isHeading: boolean; isPart: boolean; headingText?: string }[] = [];
+  const parsedParas: ParsedParagraph[] = [];
 
   for (let i = 0; i < pNodes.length; i++) {
     const p = pNodes[i];
+
     // Check style
-    const pStyle = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') || '';
-    const isHeading1 = /Heading1|Heading 1|Title|Part/i.test(pStyle);
+    const pStyleNode = p.getElementsByTagName('w:pStyle')[0];
+    const pStyle = pStyleNode?.getAttribute('w:val') || '';
 
-    // Extract text runs
-    const tNodes = p.getElementsByTagName('w:t');
-    let pText = '';
-    for (let j = 0; j < tNodes.length; j++) {
-      pText += tNodes[j].textContent || '';
+    // Check heading styles
+    const isHeading1 = /Heading\s*1|Title/i.test(pStyle);
+    const isHeading2 = /Heading\s*2|Subtitle/i.test(pStyle);
+    const isHeading3 = /Heading\s*3/i.test(pStyle);
+    const isPartStyle = /Part|Book|Act/i.test(pStyle);
+
+    // Parse runs within this paragraph to preserve bold, italic, and underline
+    const rNodes = p.getElementsByTagName('w:r');
+    let plainText = '';
+    let htmlContent = '';
+
+    for (let j = 0; j < rNodes.length; j++) {
+      const r = rNodes[j];
+      const rPr = r.getElementsByTagName('w:rPr')[0];
+
+      let isBold = false;
+      let isItalic = false;
+      let isUnderline = false;
+      let isStrike = false;
+
+      if (rPr) {
+        if (rPr.getElementsByTagName('w:b').length > 0 || rPr.getElementsByTagName('w:bCs').length > 0) {
+          isBold = true;
+        }
+        if (rPr.getElementsByTagName('w:i').length > 0 || rPr.getElementsByTagName('w:iCs').length > 0) {
+          isItalic = true;
+        }
+        if (rPr.getElementsByTagName('w:u').length > 0) {
+          isUnderline = true;
+        }
+        if (rPr.getElementsByTagName('w:strike').length > 0) {
+          isStrike = true;
+        }
+      }
+
+      // Collect text nodes in run
+      const tNodes = r.getElementsByTagName('w:t');
+      let runText = '';
+      for (let k = 0; k < tNodes.length; k++) {
+        runText += tNodes[k].textContent || '';
+      }
+
+      if (!runText) continue;
+
+      plainText += runText;
+
+      let runHtml = escapeHtml(runText);
+      if (isBold) runHtml = `<strong>${runHtml}</strong>`;
+      if (isItalic) runHtml = `<em>${runHtml}</em>`;
+      if (isUnderline) runHtml = `<u>${runHtml}</u>`;
+      if (isStrike) runHtml = `<s>${runHtml}</s>`;
+
+      htmlContent += runHtml;
     }
-    pText = pText.trim();
-    if (!pText) continue;
 
-    const isPartHeader = /^(PART|BOOK|ACT)\s+([IVXLCDM\d]+)/i.test(pText) || /PartDivider/i.test(pStyle);
-    const isChapterHeader = isHeading1 || /^(CHAPTER|PROLOGUE|EPILOGUE)\s*(\d+|[IVXLCDM]+)?/i.test(pText);
+    plainText = plainText.trim();
+    if (!plainText) continue;
 
-    paragraphs.push({
-      text: pText,
-      isHeading: isChapterHeader || isPartHeader,
-      isPart: isPartHeader,
-      headingText: isChapterHeader || isPartHeader ? pText : undefined,
+    // Check scene break patterns
+    const isSceneBreak =
+      /^(\*|\* \* \*|\*\*\*|❦|❖|✦|---|~~\~|•\s*•\s*•|\. \. \.)$/.test(plainText) ||
+      plainText === '❦  •  ❦';
+
+    // Check chapter / part patterns
+    const isPartHeader =
+      isPartStyle ||
+      /^(PART|BOOK|ACT)\s+([IVXLCDM\d]+)(:.*)?$/i.test(plainText);
+
+    const isChapterHeader =
+      isHeading1 ||
+      isHeading2 ||
+      isHeading3 ||
+      /^(CHAPTER|PROLOGUE|EPILOGUE|PREFACE|FOREWORD|INTRODUCTION|AFTERWORD|ACKNOWLEDGMENTS)\s*(\d+|[IVXLCDM]+)?(:.*)?$/i.test(
+        plainText
+      );
+
+    parsedParas.push({
+      text: plainText,
+      html: isSceneBreak
+        ? '<p class="scene-break text-center my-6">❦  •  ❦</p>'
+        : `<p>${htmlContent}</p>`,
+      isHeading: (isChapterHeader || isPartHeader) && !isSceneBreak,
+      isPart: isPartHeader && !isSceneBreak,
+      headingText: isChapterHeader || isPartHeader ? plainText : undefined,
+      isSceneBreak,
     });
   }
 
-  return assembleChaptersFromParagraphs(paragraphs, file.name.replace(/\.docx$/i, ''));
+  const fallbackTitle = file.name.replace(/\.docx$/i, '');
+  return assembleChaptersFromParsed(parsedParas, fallbackTitle);
 }
 
-// TXT / MD parsing
-async function importTextOrMarkdownFile(file: File): Promise<ImportResult> {
+/**
+ * TXT and Markdown parser with markdown heading (#, ##) and regex support.
+ */
+async function importTextOrMarkdownFile(
+  file: File
+): Promise<Omit<ImportResult, 'duplicateReport' | 'fileName' | 'fileSize'>> {
   const rawText = await file.text();
   const lines = rawText.split(/\r?\n/);
 
-  const paragraphs: { text: string; isHeading: boolean; isPart: boolean; headingText?: string }[] = [];
+  const parsedParas: ParsedParagraph[] = [];
   let currentPara: string[] = [];
+
+  const flushCurrent = () => {
+    if (currentPara.length === 0) return;
+    const fullText = currentPara.join(' ').trim();
+    if (!fullText) {
+      currentPara = [];
+      return;
+    }
+
+    const isSceneBreak =
+      /^(\*|\* \* \*|\*\*\*|❦|❖|✦|---|~~\~|•\s*•\s*•|\. \. \.)$/.test(fullText) ||
+      fullText === '❦  •  ❦';
+
+    parsedParas.push({
+      text: fullText,
+      html: isSceneBreak
+        ? '<p class="scene-break text-center my-6">❦  •  ❦</p>'
+        : `<p>${formatMarkdownInline(fullText)}</p>`,
+      isHeading: false,
+      isPart: false,
+      isSceneBreak,
+    });
+    currentPara = [];
+  };
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
-      if (currentPara.length > 0) {
-        paragraphs.push({
-          text: currentPara.join(' '),
-          isHeading: false,
-          isPart: false,
-        });
-        currentPara = [];
-      }
+      flushCurrent();
       continue;
     }
 
-    // Check if line is heading
+    // Check markdown or section headings
     const isMarkdownHeading = /^#{1,3}\s+(.+)$/.test(trimmed);
     const isPartPattern = /^(PART|BOOK|ACT)\s+([IVXLCDM\d]+)(:\s*.+)?$/i.test(trimmed);
-    const isChapterPattern = /^(CHAPTER|PROLOGUE|EPILOGUE)\s*(\d+|[IVXLCDM]+)?(:\s*.+)?$/i.test(trimmed);
+    const isChapterPattern =
+      /^(CHAPTER|PROLOGUE|EPILOGUE|PREFACE|FOREWORD|INTRODUCTION|AFTERWORD|ACKNOWLEDGMENTS)\s*(\d+|[IVXLCDM]+)?(:\s*.+)?$/i.test(
+        trimmed
+      );
 
     if (isMarkdownHeading || isPartPattern || isChapterPattern) {
-      if (currentPara.length > 0) {
-        paragraphs.push({
-          text: currentPara.join(' '),
-          isHeading: false,
-          isPart: false,
-        });
-        currentPara = [];
-      }
-      const headingClean = trimmed.replace(/^#{1,3}\s+/, '');
-      paragraphs.push({
+      flushCurrent();
+      const headingClean = trimmed.replace(/^#{1,3}\s+/, '').trim();
+      parsedParas.push({
         text: headingClean,
+        html: `<p><strong>${escapeHtml(headingClean)}</strong></p>`,
         isHeading: true,
         isPart: isPartPattern,
         headingText: headingClean,
@@ -111,44 +239,48 @@ async function importTextOrMarkdownFile(file: File): Promise<ImportResult> {
     }
   }
 
-  if (currentPara.length > 0) {
-    paragraphs.push({
-      text: currentPara.join(' '),
-      isHeading: false,
-      isPart: false,
-    });
-  }
+  flushCurrent();
 
-  return assembleChaptersFromParagraphs(paragraphs, file.name.replace(/\.(txt|md)$/i, ''));
+  const fallbackTitle = file.name.replace(/\.(txt|md)$/i, '');
+  return assembleChaptersFromParsed(parsedParas, fallbackTitle);
 }
 
-function assembleChaptersFromParagraphs(
-  paragraphs: { text: string; isHeading: boolean; isPart: boolean; headingText?: string }[],
+/**
+ * Organizes parsed paragraphs into Atticus/Vellum style Chapter structures.
+ */
+function assembleChaptersFromParsed(
+  paragraphs: ParsedParagraph[],
   fallbackTitle: string
-): ImportResult {
+): Omit<ImportResult, 'duplicateReport' | 'fileName' | 'fileSize'> {
   const chapters: Omit<Chapter, 'id' | 'bookId'>[] = [];
   let currentTitle = 'Chapter 1';
   let currentType: SectionType = 'chapter';
   let currentPartNumber: number | undefined = undefined;
-  let currentParas: string[] = [];
+  let currentHtmlBlocks: string[] = [];
+  let currentPlainText: string[] = [];
   let orderIndex = 0;
   let partCount = 0;
   let chapterCount = 0;
   let totalWordCount = 0;
 
   function flushChapter() {
-    if (currentParas.length === 0 && currentType !== 'part') return;
+    if (currentHtmlBlocks.length === 0 && currentType !== 'part') return;
 
-    const htmlContent = currentParas.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n');
-    const words = countWords(currentParas.join(' '));
+    const words = countWords(currentPlainText.join(' '));
     totalWordCount += words;
+
+    const contentHtml =
+      currentHtmlBlocks.join('\n') ||
+      (currentType === 'part'
+        ? '<p class="text-center italic opacity-75">"Across the threshold of the new realm..."</p>'
+        : '<p></p>');
 
     chapters.push({
       title: currentTitle,
       type: currentType,
-      group: 'body',
+      group: determineSectionGroup(currentType),
       partNumber: currentPartNumber,
-      content: htmlContent || (currentType === 'part' ? '<p class="text-center italic text-stone-500">Part divider</p>' : '<p></p>'),
+      content: contentHtml,
       order: orderIndex++,
       wordCount: words,
       includeInToc: true,
@@ -156,7 +288,8 @@ function assembleChaptersFromParagraphs(
       footnotes: [],
     });
 
-    currentParas = [];
+    currentHtmlBlocks = [];
+    currentPlainText = [];
   }
 
   paragraphs.forEach((p) => {
@@ -166,9 +299,10 @@ function assembleChaptersFromParagraphs(
       currentTitle = p.headingText || `Part ${partCount}`;
       currentType = 'part';
       currentPartNumber = partCount;
-      flushChapter(); // Part is a divider section
+      flushChapter(); // Full page part divider
       currentTitle = `Chapter ${++chapterCount}`;
       currentType = 'chapter';
+      currentPartNumber = undefined;
       return;
     }
 
@@ -179,15 +313,18 @@ function assembleChaptersFromParagraphs(
       return;
     }
 
-    currentParas.push(p.text);
+    currentHtmlBlocks.push(p.html);
+    currentPlainText.push(p.text);
   });
 
   flushChapter();
 
-  // If no sections were detected, place entire text into single chapter
+  // If no headings found, package all into Chapter 1
   if (chapters.length === 0 && paragraphs.length > 0) {
-    const allHtml = paragraphs.map((p) => `<p>${escapeHtml(p.text)}</p>`).join('\n');
-    const words = countWords(paragraphs.map((p) => p.text).join(' '));
+    const allHtml = paragraphs.map((p) => p.html).join('\n');
+    const allText = paragraphs.map((p) => p.text).join(' ');
+    const words = countWords(allText);
+
     chapters.push({
       title: 'Chapter 1',
       type: 'chapter',
@@ -215,8 +352,22 @@ function determineSectionType(title: string): SectionType {
   if (lower.includes('epilogue')) return 'epilogue';
   if (lower.includes('foreword')) return 'foreword';
   if (lower.includes('acknowledgment')) return 'acknowledgments';
+  if (lower.includes('afterword')) return 'afterword';
+  if (lower.includes('about the author') || lower.includes('about author')) return 'about-author';
+  if (lower.includes('dedication')) return 'dedication';
+  if (lower.includes('epigraph')) return 'epigraph';
   if (lower.includes('part') || lower.includes('book ')) return 'part';
   return 'chapter';
+}
+
+function determineSectionGroup(type: SectionType): 'front-matter' | 'body' | 'back-matter' {
+  if (['title-page', 'copyright', 'dedication', 'epigraph', 'foreword', 'toc', 'prologue'].includes(type)) {
+    return 'front-matter';
+  }
+  if (['epilogue', 'afterword', 'acknowledgments', 'about-author'].includes(type)) {
+    return 'back-matter';
+  }
+  return 'body';
 }
 
 function countWords(str: string): number {
@@ -229,4 +380,15 @@ function escapeHtml(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function formatMarkdownInline(text: string): string {
+  let res = escapeHtml(text);
+  // Bold **word**
+  res = res.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Italic *word*
+  res = res.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Strikethrough ~~word~~
+  res = res.replace(/~~(.*?)~~/g, '<s>$1</s>');
+  return res;
 }

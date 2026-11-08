@@ -33,6 +33,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ book, chapter }) => {
   };
 
   const isPartDivider = chapter?.type === 'part';
+  const isRtl = book?.direction === 'rtl' || safeStyles.direction === 'rtl' || chapter?.direction === 'rtl';
 
   // Theme styles for the reader container
   const THEME_CLASSES: Record<DeviceTheme, { bg: string; text: string; pageBg: string; border: string }> = {
@@ -140,11 +141,14 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ book, chapter }) => {
       {/* Reader Screen Stage */}
       <div className={`flex-1 overflow-y-auto p-4 sm:p-6 flex items-center justify-center ${currentTheme.bg}`}>
         <div
+          dir={isRtl ? 'rtl' : 'ltr'}
           className={`w-full ${DEVICE_STYLES[device]} ${currentTheme.pageBg} ${currentTheme.text} transition-all duration-200 flex flex-col justify-between relative overflow-hidden`}
           style={{
             fontFamily: safeStyles.bodyFont || 'Georgia, serif',
             fontSize: `${safeStyles.fontSizePt || 11.5}pt`,
             lineHeight: safeStyles.lineSpacing || 1.5,
+            direction: isRtl ? 'rtl' : 'ltr',
+            textAlign: isRtl ? 'right' : 'left',
           }}
         >
           {/* Running Header (for print & iPad) */}
@@ -214,7 +218,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ book, chapter }) => {
 
                 {/* Formatted Story Prose with Drop Caps */}
                 <div
-                  className="prose-reader leading-relaxed space-y-3"
+                  dir={isRtl ? 'rtl' : 'ltr'}
+                  className={`prose-reader leading-relaxed space-y-3 ${isRtl ? 'text-right' : ''}`}
                   dangerouslySetInnerHTML={{ __html: renderedHtml }}
                 />
 

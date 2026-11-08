@@ -289,6 +289,43 @@ export const StyleModal: React.FC<StyleModalProps> = ({
                 </label>
               </div>
             </div>
+
+            {/* Reading Direction (RTL vs LTR) */}
+            <div className="pt-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">
+                Reading Direction
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => onUpdateStyle({ direction: 'ltr' })}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    (styleConfig.direction || 'ltr') === 'ltr'
+                      ? 'bg-amber-500/15 border-amber-500/80 text-amber-300 ring-1 ring-amber-500/30'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+                  }`}
+                >
+                  <div className="font-semibold text-xs text-stone-200">LTR (Left-to-Right)</div>
+                  <p className="text-[10px] text-stone-500 mt-0.5">
+                    English, Spanish, French, German, Latin scripts
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdateStyle({ direction: 'rtl' })}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    styleConfig.direction === 'rtl'
+                      ? 'bg-amber-500/15 border-amber-500/80 text-amber-300 ring-1 ring-amber-500/30'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+                  }`}
+                >
+                  <div className="font-semibold text-xs text-stone-200">RTL (Right-to-Left)</div>
+                  <p className="text-[10px] text-stone-500 mt-0.5">
+                    Hebrew, Arabic, Persian (Farsi), Urdu scripts
+                  </p>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

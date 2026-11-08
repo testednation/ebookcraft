@@ -22,6 +22,9 @@ import { RoadmapModal } from './components/RoadmapModal';
 import { CharacterModal } from './components/CharacterModal';
 import { CoverWrapModal } from './components/CoverWrapModal';
 import { PreflightModal } from './components/PreflightModal';
+import { WritingVelocityModal } from './components/WritingVelocityModal';
+import { ImportModal } from './components/ImportModal';
+import { DocumentCleanerModal } from './components/DocumentCleanerModal';
 import { Loader2 } from 'lucide-react';
 
 export function App() {
@@ -47,6 +50,10 @@ export function App() {
   const [showCharacterModal, setShowCharacterModal] = useState(false);
   const [showCoverWrapModal, setShowCoverWrapModal] = useState(false);
   const [showPreflightModal, setShowPreflightModal] = useState(false);
+  const [showVelocityModal, setShowVelocityModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [preloadedImportFile, setPreloadedImportFile] = useState<File | null>(null);
+  const [showCleanerModal, setShowCleanerModal] = useState(false);
 
   // Pending saves ref for debounce
   const pendingSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,7 +137,11 @@ export function App() {
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setShowPreviewPane((prev) => !prev);
-      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'f') {
+      // Focus Mode toggle: supports both Ctrl+Shift+F and Ctrl+F (preventing browser Find conflict)
+      } else if (
+        (isCmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'f') ||
+        (isCmdOrCtrl && e.key.toLowerCase() === 'f')
+      ) {
         e.preventDefault();
         setFocusMode((prev) => !prev);
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'k') {
@@ -282,29 +293,59 @@ export function App() {
     await deleteCharFromDb(charId);
   };
 
-  // Import manuscript handler (.docx, .txt, .md)
+  // Open Import Modal (optionally with pre-selected file)
+  const handleOpenImport = (file?: File) => {
+    setPreloadedImportFile(file || null);
+    setShowImportModal(true);
+  };
+
+  // Import manuscript handler (.docx, .txt, .md) with append or replace
+  const handleConfirmImport = async (result: {
+    bookTitle?: string;
+    chapters: Omit<Chapter, 'id' | 'bookId'>[];
+    mode: 'append' | 'replace';
+  }) => {
+    if (!book || result.chapters.length === 0) return;
+
+    if (result.mode === 'replace') {
+      // Clean up previous chapters
+      for (const ch of chapters) {
+        await deleteChapter(ch.id);
+      }
+      const newChapters: Chapter[] = result.chapters.map((ch, idx) => ({
+        ...ch,
+        id: `imported_${Date.now()}_${idx}`,
+        bookId: book.id,
+        order: idx + 1,
+      }));
+      setChapters(newChapters);
+      setSelectedChapterId(newChapters[0]?.id || '');
+      await saveChapters(newChapters);
+    } else {
+      // Append to current chapters
+      const importedChapters: Chapter[] = result.chapters.map((ch, idx) => ({
+        ...ch,
+        id: `imported_${Date.now()}_${idx}`,
+        bookId: book.id,
+        order: chapters.length + idx + 1,
+      }));
+      const combined = [...chapters, ...importedChapters];
+      setChapters(combined);
+      setSelectedChapterId(importedChapters[0].id);
+      await saveChapters(importedChapters);
+    }
+
+    if (result.bookTitle && (!book.title || book.title === 'The Brass Meridian')) {
+      handleSaveBookDetails({ title: result.bookTitle });
+    }
+    setLastSavedAt(Date.now());
+  };
+
   const handleImportManuscript = async (result: {
     bookTitle?: string;
     chapters: Omit<Chapter, 'id' | 'bookId'>[];
   }) => {
-    if (!book || result.chapters.length === 0) return;
-
-    const importedChapters: Chapter[] = result.chapters.map((ch, idx) => ({
-      ...ch,
-      id: `imported_${Date.now()}_${idx}`,
-      bookId: book.id,
-      order: chapters.length + idx + 1,
-    }));
-
-    const combined = [...chapters, ...importedChapters];
-    setChapters(combined);
-    setSelectedChapterId(importedChapters[0].id);
-    await saveChapters(importedChapters);
-
-    if (result.bookTitle && !book.title) {
-      handleSaveBookDetails({ title: result.bookTitle });
-    }
-    setLastSavedAt(Date.now());
+    await handleConfirmImport({ ...result, mode: 'append' });
   };
 
   const handleUpdateBookGoals = async (goals: {
@@ -351,6 +392,12 @@ export function App() {
     await handleUpdateStyle({ rectoChapterOpening: enabled });
   };
 
+  const handleApplyCleaning = async (updatedChapters: Chapter[], message: string) => {
+    setChapters(updatedChapters);
+    await saveChapters(updatedChapters);
+    setLastSavedAt(Date.now());
+  };
+
   // Quick action from Roadmap Modal
   const handleRoadmapAction = (
     action: 'part' | 'import' | 'footnotes' | 'docx' | 'goals' | 'cover-wrap' | 'preflight'
@@ -358,9 +405,7 @@ export function App() {
     if (action === 'part') {
       handleAddPartDivider();
     } else if (action === 'import') {
-      // Trigger file selector via DOM or notify
-      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (input) input.click();
+      handleOpenImport();
     } else if (action === 'docx') {
       setShowExportModal(true);
     } else if (action === 'goals') {
@@ -403,6 +448,9 @@ export function App() {
         onOpenCharacters={() => setShowCharacterModal(true)}
         onOpenCoverWrap={() => setShowCoverWrapModal(true)}
         onOpenPreflight={() => setShowPreflightModal(true)}
+        onOpenWritingVelocity={() => setShowVelocityModal(true)}
+        onOpenImportModal={() => handleOpenImport()}
+        onOpenDocumentCleaner={() => setShowCleanerModal(true)}
       />
 
       {/* Main 3-Column Workspace */}
@@ -422,6 +470,8 @@ export function App() {
             onImportManuscript={handleImportManuscript}
             onUpdateBookGoals={handleUpdateBookGoals}
             onUpdateChapterTarget={handleUpdateChapterTarget}
+            onOpenWritingVelocity={() => setShowVelocityModal(true)}
+            onOpenImportModal={(file) => handleOpenImport(file)}
           />
         )}
 
@@ -430,11 +480,13 @@ export function App() {
           {selectedChapter ? (
             <EditorPane
               chapter={selectedChapter}
+              chapters={chapters}
               characters={characters}
               styleConfig={book.styleConfig}
               focusMode={focusMode}
               onUpdateChapter={handleUpdateChapter}
               onOpenCharacterModal={() => setShowCharacterModal(true)}
+              onOpenDocumentCleaner={() => setShowCleanerModal(true)}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-stone-500 text-xs">
@@ -509,6 +561,29 @@ export function App() {
         onOpenPrintDialog={() => openPrintDialog(book, chapters)}
         onOpenCoverWrap={() => setShowCoverWrapModal(true)}
         onToggleRectoOpenings={handleToggleRectoOpenings}
+      />
+
+      <WritingVelocityModal
+        isOpen={showVelocityModal}
+        onClose={() => setShowVelocityModal(false)}
+        book={book}
+        chapters={chapters}
+        onOpenBookDetails={() => setShowBookDetails(true)}
+      />
+
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onConfirmImport={handleConfirmImport}
+        preloadedFile={preloadedImportFile}
+      />
+
+      <DocumentCleanerModal
+        isOpen={showCleanerModal}
+        onClose={() => setShowCleanerModal(false)}
+        activeChapter={selectedChapter}
+        chapters={chapters}
+        onApplyCleaning={handleApplyCleaning}
       />
     </div>
   );

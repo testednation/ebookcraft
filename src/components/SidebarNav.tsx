@@ -15,6 +15,7 @@ import {
   GripVertical,
   Target,
   Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 
 interface SidebarNavProps {
@@ -30,6 +31,8 @@ interface SidebarNavProps {
   onImportManuscript: (result: { bookTitle?: string; chapters: Omit<Chapter, 'id' | 'bookId'>[] }) => void;
   onUpdateBookGoals: (goals: { targetWordCount: number; dailyWordGoal: number; resetTodayBaseline?: boolean }) => void;
   onUpdateChapterTarget: (chapterId: string, target: number) => void;
+  onOpenWritingVelocity?: () => void;
+  onOpenImportModal?: (file?: File) => void;
 }
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({
@@ -45,6 +48,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   onImportManuscript,
   onUpdateBookGoals,
   onUpdateChapterTarget,
+  onOpenWritingVelocity,
+  onOpenImportModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'chapters' | 'characters'>('chapters');
   const [isImporting, setIsImporting] = useState(false);
@@ -53,6 +58,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (onOpenImportModal) {
+      onOpenImportModal(file);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     try {
       setIsImporting(true);
@@ -70,6 +81,13 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const frontMatter = chapters.filter((c) => c.group === 'front-matter');
   const bodyChapters = chapters.filter((c) => c.group === 'body');
   const backMatter = chapters.filter((c) => c.group === 'back-matter');
+
+  const totalBookWords = chapters.reduce((sum, c) => sum + (c.wordCount || 0), 0);
+  const targetWordCount = book.targetWordCount || 60000;
+  const bookProgressPercent = Math.min(
+    100,
+    Math.round((totalBookWords / Math.max(1, targetWordCount)) * 100)
+  );
 
   const selectedChapter = chapters.find((c) => c.id === selectedChapterId);
 
@@ -131,10 +149,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             </button>
 
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => (onOpenImportModal ? onOpenImportModal() : fileInputRef.current?.click())}
               disabled={isImporting}
               className="p-1.5 rounded-lg bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs transition-colors flex items-center justify-center"
-              title="Import DOCX, TXT, or MD"
+              title="Import DOCX, TXT, or Markdown Manuscript"
             >
               <Upload className="w-3.5 h-3.5 text-emerald-400" />
             </button>
@@ -183,6 +201,41 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Visual Progress Bar beneath Sidebar Navigation */}
+          <div className="px-3 pt-2.5 pb-2 border-t border-stone-800/80 bg-stone-950/90 shrink-0">
+            <div
+              onClick={onOpenWritingVelocity}
+              className="p-2.5 rounded-xl bg-stone-900/90 border border-stone-800 hover:border-amber-500/50 cursor-pointer transition-all group shadow-sm"
+              title="Click to open Writing Velocity Dashboard & 30-Day History"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-stone-300 font-medium group-hover:text-amber-300 transition-colors">
+                  <Target className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Total Manuscript Goal</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/30">
+                    {bookProgressPercent}%
+                  </span>
+                  <TrendingUp className="w-3.5 h-3.5 text-stone-500 group-hover:text-amber-400 transition-colors" />
+                </div>
+              </div>
+
+              {/* Filling Progress Bar */}
+              <div className="w-full h-2 rounded-full bg-stone-800 overflow-hidden relative shadow-inner">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400 transition-all duration-500 shadow-sm"
+                  style={{ width: `${Math.max(bookProgressPercent, 2)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between mt-1.5 text-[10px] text-stone-400 font-mono">
+                <span className="text-stone-300 font-medium">{totalBookWords.toLocaleString()} words</span>
+                <span className="text-stone-500">of {targetWordCount.toLocaleString()} target</span>
+              </div>
+            </div>
           </div>
 
           {/* Sidebar Footer: Concentric Circular Goal Tracker Widget */}

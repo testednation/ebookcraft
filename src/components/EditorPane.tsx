@@ -1,5 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Chapter, CharacterProfile, FootnoteItem, StyleConfig } from '../types/book';
+import {
+  detectDuplicatesInContent,
+  autoDeduplicateContent,
+  removeParagraphByIndex,
+  DuplicateParagraphItem,
+} from '../services/duplicateDetector';
 import {
   Bold,
   Italic,
@@ -15,31 +21,46 @@ import {
   ChevronUp,
   Sliders,
   Bookmark,
+  Copy,
+  CopyCheck,
+  AlertCircle,
+  Wand2,
 } from 'lucide-react';
 
 interface EditorPaneProps {
   chapter: Chapter;
+  chapters?: Chapter[];
   characters: CharacterProfile[];
   styleConfig: StyleConfig;
   focusMode: boolean;
   onUpdateChapter: (updated: Partial<Chapter>) => void;
   onOpenCharacterModal: () => void;
+  onOpenDocumentCleaner?: () => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
   chapter,
+  chapters = [],
   characters,
   styleConfig,
   focusMode,
   onUpdateChapter,
   onOpenCharacterModal,
+  onOpenDocumentCleaner,
 }) => {
+  const currentDirection: 'ltr' | 'rtl' = chapter.direction || styleConfig.direction || 'ltr';
+
+  const toggleDirection = () => {
+    const nextDir = currentDirection === 'rtl' ? 'ltr' : 'rtl';
+    onUpdateChapter({ direction: nextDir });
+  };
   const [content, setContent] = useState(chapter.content || '');
   const [title, setTitle] = useState(chapter.title || '');
   const [subtitle, setSubtitle] = useState(chapter.subtitle || '');
   const [partNumber, setPartNumber] = useState<number>(chapter.partNumber || 1);
   const [showFootnotesDrawer, setShowFootnotesDrawer] = useState(false);
   const [showReadabilityDrawer, setShowReadabilityDrawer] = useState(false);
+  const [showDuplicatesDrawer, setShowDuplicatesDrawer] = useState(false);
   const [showCharacterQuickRef, setShowCharacterQuickRef] = useState(false);
 
   // Sync state when selected chapter changes
@@ -111,6 +132,25 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
 
   // Readability computation
   const readabilityStats = computeReadability(content);
+
+  // Duplicate Paragraphs Detection
+  const duplicateParagraphs = useMemo(() => {
+    return detectDuplicatesInContent(content, chapter.title, chapter.id);
+  }, [content, chapter.title, chapter.id]);
+
+  // Handle removing a specific duplicate paragraph occurrence
+  const handleRemoveDuplicateParagraph = (pIndex: number) => {
+    const updatedHtml = removeParagraphByIndex(content, pIndex);
+    handleContentChange(updatedHtml);
+  };
+
+  // Handle auto-deduplication of entire chapter
+  const handleAutoDeduplicateChapter = () => {
+    const { newContent, removedCount } = autoDeduplicateContent(content);
+    if (removedCount > 0) {
+      handleContentChange(newContent);
+    }
+  };
 
   const isPartDivider = chapter.type === 'part';
 
@@ -222,6 +262,63 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             </button>
           )}
 
+          {/* Duplicate Paragraphs Detector Toggle */}
+          {!isPartDivider && (
+            <button
+              onClick={() => setShowDuplicatesDrawer(!showDuplicatesDrawer)}
+              className={`px-2 py-1 rounded border flex items-center gap-1.5 transition-colors ${
+                duplicateParagraphs.length > 0
+                  ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 font-semibold'
+                  : showDuplicatesDrawer
+                  ? 'bg-stone-800 border-stone-700 text-stone-200'
+                  : 'bg-stone-850 border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+              }`}
+              title="Duplicate Paragraph Detector"
+            >
+              {duplicateParagraphs.length > 0 ? (
+                <Copy className="w-3 h-3 text-amber-400" />
+              ) : (
+                <CopyCheck className="w-3 h-3 text-emerald-400" />
+              )}
+              <span>
+                {duplicateParagraphs.length > 0
+                  ? `Duplicates (${duplicateParagraphs.length})`
+                  : 'Duplicates (0)'}
+              </span>
+            </button>
+          )}
+
+          {/* Document Cleaner Tool */}
+          {onOpenDocumentCleaner && (
+            <button
+              type="button"
+              onClick={onOpenDocumentCleaner}
+              className="px-2 py-1 rounded bg-stone-850 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-amber-300 flex items-center gap-1 transition-colors"
+              title="Clean Document (Typographical scrub, smart quotes, em-dashes)"
+            >
+              <Wand2 className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Clean</span>
+            </button>
+          )}
+
+          {/* RTL / LTR Direction Toggle */}
+          <button
+            type="button"
+            onClick={toggleDirection}
+            className={`px-2 py-1 rounded border font-mono text-[11px] font-bold flex items-center gap-1 transition-colors ${
+              currentDirection === 'rtl'
+                ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-sm'
+                : 'bg-stone-850 border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+            }`}
+            title={
+              currentDirection === 'rtl'
+                ? 'Right-To-Left active (Hebrew, Arabic, Persian, Urdu). Click to switch to LTR'
+                : 'Left-To-Right active. Click to switch to RTL'
+            }
+          >
+            <span>{currentDirection.toUpperCase()}</span>
+          </button>
+
           {/* Footnotes Drawer Toggle */}
           {!isPartDivider && (chapter.footnotes?.length || 0) > 0 && (
             <button
@@ -277,6 +374,107 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             <span className="font-semibold text-amber-300">Style Suggestion: </span>
             {readabilityStats.suggestion}
           </div>
+        </div>
+      )}
+
+      {/* Duplicate Paragraphs Inspector Drawer */}
+      {showDuplicatesDrawer && (
+        <div className="border-b border-stone-800 bg-stone-950/95 p-4 shrink-0 animate-fade-in text-xs max-h-72 overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Copy className="w-4 h-4 text-amber-400" />
+              <div>
+                <h4 className="font-semibold text-stone-200">
+                  Duplicate Paragraph Detector ({duplicateParagraphs.length} found)
+                </h4>
+                <p className="text-[10px] text-stone-400">
+                  Identifies repeated paragraph blocks in this chapter to avoid accidental pasting or redundant copy.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {duplicateParagraphs.length > 0 && (
+                <button
+                  onClick={handleAutoDeduplicateChapter}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                  title="Remove duplicate copies while keeping the original"
+                >
+                  <Wand2 className="w-3 h-3" />
+                  <span>Deduplicate Chapter</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowDuplicatesDrawer(false)}
+                className="text-stone-500 hover:text-stone-300 text-xs"
+              >
+                &times; Close
+              </button>
+            </div>
+          </div>
+
+          {duplicateParagraphs.length === 0 ? (
+            <div className="p-3 rounded-lg bg-stone-900/60 border border-stone-800 flex items-center gap-2 text-stone-400">
+              <CopyCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>No duplicate paragraphs detected in this section. Every paragraph is unique.</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {duplicateParagraphs.map((dup) => (
+                <div
+                  key={dup.id}
+                  className="p-3 rounded-xl bg-stone-900 border border-stone-800 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30">
+                        {dup.duplicateCount}x Repeated
+                      </span>
+                      <span className="text-[10px] font-mono text-stone-400">
+                        {dup.wordCount} words
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-stone-300 text-[11px] italic bg-stone-950/80 p-2 rounded-lg border border-stone-800/80 line-clamp-3">
+                    "{dup.text}"
+                  </p>
+
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">
+                      Occurrences in Chapter:
+                    </span>
+                    {dup.occurrences.map((occ, oIdx) => (
+                      <div
+                        key={oIdx}
+                        className="flex items-center justify-between p-1.5 rounded bg-stone-950 border border-stone-800/60 text-[11px]"
+                      >
+                        <span className="text-stone-400">
+                          {oIdx === 0 ? (
+                            <span className="text-emerald-400 font-semibold mr-1.5">[Original]</span>
+                          ) : (
+                            <span className="text-amber-400 font-semibold mr-1.5">[Copy #{oIdx}]</span>
+                          )}
+                          Paragraph #{occ.paragraphIndex + 1}
+                        </span>
+
+                        {oIdx > 0 && (
+                          <button
+                            onClick={() => handleRemoveDuplicateParagraph(occ.paragraphIndex)}
+                            className="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-medium flex items-center gap-1 transition-colors"
+                            title="Remove this duplicate paragraph"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-400" />
+                            <span>Remove Duplicate</span>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -415,27 +613,38 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             /* Standard Chapter Editor Canvas */
             <>
               {/* Title & Subtitle Inputs */}
-              <div className="mb-6 space-y-2">
+              <div className="mb-6 space-y-2" dir={currentDirection}>
                 <input
                   type="text"
+                  dir={currentDirection}
                   value={title}
                   onChange={(e) => handleTitleChange(e.target.value)}
                   placeholder="Chapter Title..."
                   className={`w-full bg-transparent font-serif font-bold text-2xl lg:text-3xl text-stone-100 placeholder-stone-600 focus:outline-none border-b pb-2 ${
                     focusMode ? 'border-stone-800' : 'border-stone-800 focus:border-amber-500'
                   }`}
+                  style={{
+                    direction: currentDirection,
+                    textAlign: currentDirection === 'rtl' ? 'right' : 'left',
+                  }}
                 />
                 <input
                   type="text"
+                  dir={currentDirection}
                   value={subtitle}
                   onChange={(e) => handleSubtitleChange(e.target.value)}
                   placeholder="Optional Chapter Subtitle / Date / Location..."
                   className="w-full bg-transparent font-serif italic text-xs lg:text-sm text-stone-400 placeholder-stone-700 focus:outline-none border-b border-transparent focus:border-stone-800 pb-1"
+                  style={{
+                    direction: currentDirection,
+                    textAlign: currentDirection === 'rtl' ? 'right' : 'left',
+                  }}
                 />
               </div>
 
               {/* Prose Writing Area */}
               <textarea
+                dir={currentDirection}
                 value={content}
                 onChange={(e) => handleContentChange(e.target.value)}
                 placeholder="Begin your story here... Use standard paragraphs and markdown headings (#) or HTML tags."
@@ -446,6 +655,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 }`}
                 style={{
                   fontFamily: styleConfig.bodyFont || 'Georgia, serif',
+                  direction: currentDirection,
+                  textAlign: currentDirection === 'rtl' ? 'right' : 'left',
                 }}
               />
             </>
