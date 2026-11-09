@@ -571,6 +571,7 @@ export function App() {
               onUpdateChapter={handleUpdateChapter}
               onOpenCharacterModal={() => setShowCharacterModal(true)}
               onOpenDocumentCleaner={() => setShowCleanerModal(true)}
+              onSelectChapter={(id) => setSelectedChapterId(id)}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-stone-500 text-xs">

@@ -28,11 +28,13 @@ import {
   Gauge,
   Waves,
   Flame,
+  Map,
 } from 'lucide-react';
 import { analyzeChapterSentiment } from '../services/sentimentAnalyzer';
 import { WritingSentimentGauge } from './WritingSentimentGauge';
 import { analyzeRepetitiveWords } from '../services/repetitiveWordDetector';
 import { WordRepetitionHeatmap } from './WordRepetitionHeatmap';
+import { BookMapVisualizer } from './BookMapVisualizer';
 
 interface EditorPaneProps {
   chapter: Chapter;
@@ -43,6 +45,7 @@ interface EditorPaneProps {
   onUpdateChapter: (updated: Partial<Chapter>) => void;
   onOpenCharacterModal: () => void;
   onOpenDocumentCleaner?: () => void;
+  onSelectChapter?: (chapterId: string) => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -54,6 +57,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   onUpdateChapter,
   onOpenCharacterModal,
   onOpenDocumentCleaner,
+  onSelectChapter,
 }) => {
   const currentDirection: 'ltr' | 'rtl' = chapter.direction || styleConfig.direction || 'ltr';
 
@@ -70,6 +74,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   const [showDuplicatesDrawer, setShowDuplicatesDrawer] = useState(false);
   const [showSentimentDrawer, setShowSentimentDrawer] = useState(false);
   const [showHeatmapDrawer, setShowHeatmapDrawer] = useState(false);
+  const [showBookMapDrawer, setShowBookMapDrawer] = useState(false);
   const [showCharacterQuickRef, setShowCharacterQuickRef] = useState(false);
 
   // Sync state when selected chapter changes
@@ -334,6 +339,23 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             </button>
           )}
 
+          {/* Book Map Timeline & Manuscript Pacing Toggle (D3.js) */}
+          {chapters && chapters.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowBookMapDrawer(!showBookMapDrawer)}
+              className={`px-2 py-1 rounded border flex items-center gap-1.5 transition-colors ${
+                showBookMapDrawer
+                  ? 'bg-sky-500/20 border-sky-500/60 text-sky-300 font-semibold shadow-sm'
+                  : 'bg-stone-850 border-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-800'
+              }`}
+              title="Book Map (D3.js Entire Manuscript Timeline & Pacing Horizon)"
+            >
+              <Map className="w-3 h-3 text-sky-400" />
+              <span className="hidden sm:inline">Book Map</span>
+            </button>
+          )}
+
           {/* Duplicate Paragraphs Detector Toggle */}
           {!isPartDivider && (
             <button
@@ -462,6 +484,16 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
         <WordRepetitionHeatmap
           report={repetitiveWordsReport}
           onClose={() => setShowHeatmapDrawer(false)}
+        />
+      )}
+
+      {/* D3.js Book Map & Chapter Pacing Timeline Drawer */}
+      {showBookMapDrawer && (
+        <BookMapVisualizer
+          chapters={chapters}
+          currentChapterId={chapter.id}
+          onSelectChapter={onSelectChapter}
+          onClose={() => setShowBookMapDrawer(false)}
         />
       )}
 
