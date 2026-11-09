@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Upload,
   Wand2,
+  BookMarked,
+  Menu,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -39,6 +41,9 @@ interface HeaderProps {
   onOpenWritingVelocity: () => void;
   onOpenImportModal: () => void;
   onOpenDocumentCleaner: () => void;
+  onOpenBackmatterModal?: () => void;
+  onToggleMobileSidebar?: () => void;
+  onOpenMobileTools?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,15 +65,29 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWritingVelocity,
   onOpenImportModal,
   onOpenDocumentCleaner,
+  onOpenBackmatterModal,
+  onToggleMobileSidebar,
+  onOpenMobileTools,
 }) => {
   // Estimated reading time at average adult reading speed of 200 words per minute
   const readingTimeMinutes = totalWords > 0 ? Math.ceil(totalWords / 200) : 0;
 
   return (
-    <header className="h-14 border-b border-stone-800 bg-stone-950 px-4 flex items-center justify-between shrink-0 select-none z-20">
+    <header className="h-14 border-b border-stone-800 bg-stone-950 px-2 sm:px-4 flex items-center justify-between shrink-0 select-none z-20">
       {/* Left: Branding & Manuscript Title */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+        {/* Mobile Hamburger to toggle manuscript outline */}
+        {onToggleMobileSidebar && (
+          <button
+            onClick={onToggleMobileSidebar}
+            className="lg:hidden p-2 -ml-1 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-900 transition-colors"
+            title="Toggle Manuscript Outline"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+
+        <div className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-stone-950 shadow-md">
             <Feather className="w-4 h-4 stroke-[2.5]" />
           </div>
@@ -148,66 +167,113 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Actions & Tools */}
-      <div className="flex items-center gap-1.5">
-        {/* Full Cover Wrap & Spine (Phase 3) */}
-        <button
-          onClick={onOpenCoverWrap}
-          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Full Cover Wrap & Spine Calculator (Phase 3)"
-        >
-          <Layers className="w-4 h-4 text-amber-400" />
-          <span className="hidden xl:inline text-xs">Cover Wrap</span>
-        </button>
+      {/* Right: Actions & Tools */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Desktop-only Studio Tools Cluster */}
+        <div className="hidden lg:flex items-center gap-1.5">
+          {/* Full Cover Wrap & Spine (Phase 3) */}
+          <button
+            onClick={onOpenCoverWrap}
+            className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Full Cover Wrap & Spine Calculator (Phase 3)"
+          >
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span className="hidden xl:inline text-xs">Cover Wrap</span>
+          </button>
 
-        {/* Pre-Flight Inspection (Phase 3) */}
-        <button
-          onClick={onOpenPreflight}
-          className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Pre-Flight Print Proof Inspection (Phase 3)"
-        >
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span className="hidden xl:inline text-xs">Pre-Flight</span>
-        </button>
+          {/* Pre-Flight Inspection (Phase 3) */}
+          <button
+            onClick={onOpenPreflight}
+            className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Pre-Flight Print Proof Inspection (Phase 3)"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="hidden xl:inline text-xs">Pre-Flight</span>
+          </button>
 
-        {/* Import DOCX Manuscript */}
-        <button
-          onClick={onOpenImportModal}
-          className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Import DOCX, TXT, or Markdown Manuscript"
-        >
-          <Upload className="w-4 h-4 text-emerald-400" />
-          <span className="hidden xl:inline text-xs">Import DOCX</span>
-        </button>
+          {/* Import DOCX Manuscript */}
+          <button
+            onClick={onOpenImportModal}
+            className="p-2 rounded-lg text-stone-400 hover:text-emerald-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Import DOCX, TXT, or Markdown Manuscript"
+          >
+            <Upload className="w-4 h-4 text-emerald-400" />
+            <span className="hidden xl:inline text-xs">Import DOCX</span>
+          </button>
 
-        {/* Clean Document (Typographical Scrub) */}
-        <button
-          onClick={onOpenDocumentCleaner}
-          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Clean Document (Typographical scrub, smart quotes, em-dashes)"
-        >
-          <Wand2 className="w-4 h-4 text-amber-400" />
-          <span className="hidden xl:inline text-xs">Clean Doc</span>
-        </button>
+          {/* Clean Document (Typographical Scrub) */}
+          <button
+            onClick={onOpenDocumentCleaner}
+            className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Clean Document (Typographical scrub, smart quotes, em-dashes)"
+          >
+            <Wand2 className="w-4 h-4 text-amber-400" />
+            <span className="hidden xl:inline text-xs">Clean Doc</span>
+          </button>
 
-        {/* Writing Velocity (Recharts Dashboard) */}
-        <button
-          onClick={onOpenWritingVelocity}
-          className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Writing Velocity Dashboard & 30-Day Analytics"
-        >
-          <TrendingUp className="w-4 h-4 text-amber-400" />
-          <span className="hidden xl:inline text-xs">Velocity</span>
-        </button>
+          {/* Backmatter Manager (About Author, Copyright, Acknowledgments, Newsletter) */}
+          {onOpenBackmatterModal && (
+            <button
+              onClick={onOpenBackmatterModal}
+              className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+              title="Backmatter Manager (About Author, Copyright, Acknowledgments, Newsletter Signup)"
+            >
+              <BookMarked className="w-4 h-4 text-amber-400" />
+              <span className="hidden xl:inline text-xs">Backmatter</span>
+            </button>
+          )}
 
-        {/* Characters Bible Drawer button */}
-        <button
-          onClick={onOpenCharacters}
-          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Characters Bible & Cast"
-        >
-          <Users className="w-4 h-4" />
-          <span className="hidden lg:inline text-xs">Characters</span>
-        </button>
+          {/* Writing Velocity (Recharts Dashboard) */}
+          <button
+            onClick={onOpenWritingVelocity}
+            className="p-2 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Writing Velocity Dashboard & 30-Day Analytics"
+          >
+            <TrendingUp className="w-4 h-4 text-amber-400" />
+            <span className="hidden xl:inline text-xs">Velocity</span>
+          </button>
+
+          {/* Characters Bible Drawer button */}
+          <button
+            onClick={onOpenCharacters}
+            className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Characters Bible & Cast"
+          >
+            <Users className="w-4 h-4" />
+            <span className="hidden lg:inline text-xs">Characters</span>
+          </button>
+
+          {/* Styling Modal */}
+          <button
+            onClick={onOpenStyleModal}
+            className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
+            title="Styling & Typography"
+          >
+            <Sliders className="w-4 h-4" />
+            <span className="hidden xl:inline text-xs">Styling</span>
+          </button>
+
+          {/* Keyboard Shortcuts */}
+          <button
+            onClick={onOpenShortcuts}
+            className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors"
+            title="Keyboard Shortcuts (Ctrl+K)"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Mobile Tools Sheet Button */}
+        {onOpenMobileTools && (
+          <button
+            onClick={onOpenMobileTools}
+            className="lg:hidden p-2 rounded-lg bg-stone-900 border border-stone-800 text-stone-200 hover:text-amber-300 text-xs font-semibold flex items-center gap-1 transition-colors"
+            title="Open Studio Tools Sheet"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span className="text-[11px]">Tools</span>
+          </button>
+        )}
 
         {/* Focus Session Timer (Writing Sprint) */}
         <FocusTimer focusMode={focusMode} onToggleFocusMode={onToggleFocusMode} />
@@ -224,25 +290,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {focusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           <span className="hidden lg:inline text-xs">{focusMode ? 'Exit Focus' : 'Focus'}</span>
-        </button>
-
-        {/* Styling Modal */}
-        <button
-          onClick={onOpenStyleModal}
-          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors flex items-center gap-1.5 text-xs"
-          title="Styling & Typography"
-        >
-          <Sliders className="w-4 h-4" />
-          <span className="hidden xl:inline text-xs">Styling</span>
-        </button>
-
-        {/* Keyboard Shortcuts */}
-        <button
-          onClick={onOpenShortcuts}
-          className="p-2 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition-colors"
-          title="Keyboard Shortcuts (Ctrl+K)"
-        >
-          <Keyboard className="w-4 h-4" />
         </button>
 
         {/* Export Button */}

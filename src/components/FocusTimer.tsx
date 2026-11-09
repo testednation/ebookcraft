@@ -239,7 +239,7 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ focusMode, onToggleFocus
 
       {/* Popover Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 z-50 text-stone-200 animate-fade-in text-xs space-y-4">
+        <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-24px)] bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 z-50 text-stone-200 animate-fade-in text-xs space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-stone-800 pb-2.5">
             <div className="flex items-center gap-2">

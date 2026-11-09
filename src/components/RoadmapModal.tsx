@@ -21,7 +21,7 @@ interface RoadmapModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectAction?: (
-    action: 'part' | 'import' | 'footnotes' | 'docx' | 'goals' | 'cover-wrap' | 'preflight'
+    action: 'part' | 'import' | 'footnotes' | 'docx' | 'goals' | 'cover-wrap' | 'preflight' | 'backmatter'
   ) => void;
 }
 
@@ -31,8 +31,8 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({ isOpen, onClose, onS
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-5xl max-h-[90vh] bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-stone-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-5xl max-h-[92dvh] sm:max-h-[90vh] bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-stone-100">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/80">
           <div className="flex items-center gap-3">

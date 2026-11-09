@@ -25,7 +25,14 @@ import {
   CopyCheck,
   AlertCircle,
   Wand2,
+  Gauge,
+  Waves,
+  Flame,
 } from 'lucide-react';
+import { analyzeChapterSentiment } from '../services/sentimentAnalyzer';
+import { WritingSentimentGauge } from './WritingSentimentGauge';
+import { analyzeRepetitiveWords } from '../services/repetitiveWordDetector';
+import { WordRepetitionHeatmap } from './WordRepetitionHeatmap';
 
 interface EditorPaneProps {
   chapter: Chapter;
@@ -61,6 +68,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   const [showFootnotesDrawer, setShowFootnotesDrawer] = useState(false);
   const [showReadabilityDrawer, setShowReadabilityDrawer] = useState(false);
   const [showDuplicatesDrawer, setShowDuplicatesDrawer] = useState(false);
+  const [showSentimentDrawer, setShowSentimentDrawer] = useState(false);
+  const [showHeatmapDrawer, setShowHeatmapDrawer] = useState(false);
   const [showCharacterQuickRef, setShowCharacterQuickRef] = useState(false);
 
   // Sync state when selected chapter changes
@@ -133,6 +142,16 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   // Readability computation
   const readabilityStats = computeReadability(content);
 
+  // Literary Sentiment & Narrative Pacing computation (D3.js integration)
+  const sentimentReport = useMemo(() => {
+    return analyzeChapterSentiment(content);
+  }, [content]);
+
+  // Repetitive & Overused Words Heatmap computation (D3.js integration)
+  const repetitiveWordsReport = useMemo(() => {
+    return analyzeRepetitiveWords(content);
+  }, [content]);
+
   // Duplicate Paragraphs Detection
   const duplicateParagraphs = useMemo(() => {
     return detectDuplicatesInContent(content, chapter.title, chapter.id);
@@ -164,7 +183,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     >
       {/* Editor Sub-Header Toolbar */}
       <div
-        className={`px-4 py-2 border-b flex items-center justify-between shrink-0 select-none text-xs transition-colors ${
+        className={`px-2 sm:px-4 py-2 border-b flex items-center justify-between shrink-0 select-none text-xs transition-colors overflow-x-auto no-scrollbar gap-2 ${
           focusMode
             ? 'border-stone-800 bg-[#141210]'
             : 'border-stone-800 bg-stone-950/80'
@@ -259,6 +278,59 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             >
               <BarChart2 className="w-3 h-3 text-emerald-400" />
               <span>Grade {readabilityStats.gradeLevel}</span>
+            </button>
+          )}
+
+          {/* Writing Sentiment & Tone Meter Toggle (D3.js) */}
+          {!isPartDivider && (
+            <button
+              type="button"
+              onClick={() => setShowSentimentDrawer(!showSentimentDrawer)}
+              className={`px-2 py-1 rounded border flex items-center gap-1.5 transition-colors ${
+                showSentimentDrawer
+                  ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 font-semibold shadow-sm'
+                  : 'bg-stone-850 border-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-800'
+              }`}
+              title="Writing Sentiment & Narrative Pacing (D3.js Tone & Variance Analysis)"
+            >
+              <Gauge className="w-3 h-3 text-sky-400" />
+              <span className="hidden sm:inline">Tone:</span>
+              <span className="font-semibold text-[11px] truncate max-w-[85px]">
+                {sentimentReport.toneLabel.split(' ')[0]}
+              </span>
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{
+                  backgroundColor:
+                    sentimentReport.overallScore <= -0.2
+                      ? '#f43f5e'
+                      : sentimentReport.overallScore >= 0.2
+                      ? '#34d399'
+                      : '#94a3b8',
+                }}
+              />
+            </button>
+          )}
+
+          {/* Overused Words Heatmap Toggle (D3.js) */}
+          {!isPartDivider && (
+            <button
+              type="button"
+              onClick={() => setShowHeatmapDrawer(!showHeatmapDrawer)}
+              className={`px-2 py-1 rounded border flex items-center gap-1.5 transition-colors ${
+                showHeatmapDrawer
+                  ? 'bg-rose-500/20 border-rose-500/60 text-rose-300 font-semibold shadow-sm'
+                  : repetitiveWordsReport.highestLocalEcho && repetitiveWordsReport.highestLocalEcho.count >= 3
+                  ? 'bg-rose-500/10 border-rose-500/40 text-rose-300 hover:bg-rose-500/20'
+                  : 'bg-stone-850 border-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-800'
+              }`}
+              title="Vocabulary Heatmap & Overused Words (D3.js Density Grid)"
+            >
+              <Flame className="w-3 h-3 text-rose-400" />
+              <span className="hidden sm:inline">Repetition</span>
+              <span className="font-mono text-[10px] text-stone-400">
+                ({repetitiveWordsReport.allDetectedWords.length})
+              </span>
             </button>
           )}
 
@@ -375,6 +447,22 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             {readabilityStats.suggestion}
           </div>
         </div>
+      )}
+
+      {/* D3.js Writing Sentiment & Narrative Pacing Gauge Drawer */}
+      {showSentimentDrawer && (
+        <WritingSentimentGauge
+          report={sentimentReport}
+          onClose={() => setShowSentimentDrawer(false)}
+        />
+      )}
+
+      {/* D3.js Overused Words & Vocabulary Heatmap Drawer */}
+      {showHeatmapDrawer && (
+        <WordRepetitionHeatmap
+          report={repetitiveWordsReport}
+          onClose={() => setShowHeatmapDrawer(false)}
+        />
       )}
 
       {/* Duplicate Paragraphs Inspector Drawer */}
@@ -532,7 +620,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       )}
 
       {/* Main Writing Canvas */}
-      <div className="flex-1 overflow-y-auto px-6 py-8 flex justify-center">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-8 flex justify-center pb-20 lg:pb-8">
         <div
           className={`w-full max-w-2xl flex flex-col transition-all ${
             focusMode ? 'max-w-3xl font-serif' : ''

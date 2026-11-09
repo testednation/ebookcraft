@@ -61,9 +61,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ book, chapter }) => {
 
   // Device container dimensions
   const DEVICE_STYLES: Record<DeviceType, string> = {
-    kindle: 'max-w-[430px] aspect-[9/14] rounded-2xl shadow-2xl border-8 border-stone-800 p-6',
-    'apple-books': 'max-w-[560px] aspect-[3/4] rounded-3xl shadow-2xl border-[12px] border-stone-850 p-8',
-    'print-spread': 'max-w-[620px] aspect-[5.5/8.5] rounded-lg shadow-2xl border-4 border-stone-300 p-10',
+    kindle: 'w-full max-w-[430px] aspect-[9/14] rounded-2xl shadow-2xl border-4 sm:border-8 border-stone-800 p-4 sm:p-6',
+    'apple-books': 'w-full max-w-[560px] aspect-[3/4] rounded-2xl sm:rounded-3xl shadow-2xl border-4 sm:border-[12px] border-stone-850 p-4 sm:p-8',
+    'print-spread': 'w-full max-w-[620px] aspect-[5.5/8.5] rounded-lg shadow-2xl border-2 sm:border-4 border-stone-300 p-5 sm:p-10',
   };
 
   // Format chapter content through our typography engine
@@ -72,7 +72,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ book, chapter }) => {
   const ornamentSvg = getOrnamentSvg(safeStyles.chapterOrnamentId || 'fleuron');
 
   return (
-    <aside className="w-[42%] lg:w-[45%] bg-stone-950 border-l border-stone-800 flex flex-col h-full overflow-hidden select-none">
+    <aside className="w-full lg:w-[45%] bg-stone-950 border-l border-stone-800 flex flex-col h-full overflow-hidden select-none">
       {/* Reader Controls Toolbar */}
       <div className="h-11 px-4 border-b border-stone-800 bg-stone-900/40 flex items-center justify-between shrink-0 text-xs">
         {/* Device Switcher */}

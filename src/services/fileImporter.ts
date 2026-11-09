@@ -354,6 +354,9 @@ function determineSectionType(title: string): SectionType {
   if (lower.includes('acknowledgment')) return 'acknowledgments';
   if (lower.includes('afterword')) return 'afterword';
   if (lower.includes('about the author') || lower.includes('about author')) return 'about-author';
+  if (lower.includes('newsletter') || lower.includes('mailing list')) return 'newsletter';
+  if (lower.includes('also by') || lower.includes('other books by')) return 'also-by';
+  if (lower.includes('review') || lower.includes('note to reader') || lower.includes('dear reader')) return 'review-request';
   if (lower.includes('dedication')) return 'dedication';
   if (lower.includes('epigraph')) return 'epigraph';
   if (lower.includes('part') || lower.includes('book ')) return 'part';
@@ -364,7 +367,7 @@ function determineSectionGroup(type: SectionType): 'front-matter' | 'body' | 'ba
   if (['title-page', 'copyright', 'dedication', 'epigraph', 'foreword', 'toc', 'prologue'].includes(type)) {
     return 'front-matter';
   }
-  if (['epilogue', 'afterword', 'acknowledgments', 'about-author'].includes(type)) {
+  if (['epilogue', 'afterword', 'acknowledgments', 'about-author', 'newsletter', 'also-by', 'review-request'].includes(type)) {
     return 'back-matter';
   }
   return 'body';

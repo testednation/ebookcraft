@@ -25,6 +25,9 @@ import { PreflightModal } from './components/PreflightModal';
 import { WritingVelocityModal } from './components/WritingVelocityModal';
 import { ImportModal } from './components/ImportModal';
 import { DocumentCleanerModal } from './components/DocumentCleanerModal';
+import { BackmatterManagerModal } from './components/BackmatterManagerModal';
+import { MobileBottomNav, MobileTab } from './components/MobileBottomNav';
+import { MobileToolsDrawer } from './components/MobileToolsDrawer';
 import { Loader2 } from 'lucide-react';
 
 export function App() {
@@ -41,6 +44,11 @@ export function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [showPreviewPane, setShowPreviewPane] = useState(true);
 
+  // Mobile layout state
+  const [mobileActiveTab, setMobileActiveTab] = useState<MobileTab>('editor');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileToolsOpen, setIsMobileToolsOpen] = useState(false);
+
   // Modal dialog states
   const [showBookDetails, setShowBookDetails] = useState(false);
   const [showStyleModal, setShowStyleModal] = useState(false);
@@ -54,6 +62,7 @@ export function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [preloadedImportFile, setPreloadedImportFile] = useState<File | null>(null);
   const [showCleanerModal, setShowCleanerModal] = useState(false);
+  const [showBackmatterModal, setShowBackmatterModal] = useState(false);
 
   // Pending saves ref for debounce
   const pendingSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -398,9 +407,21 @@ export function App() {
     setLastSavedAt(Date.now());
   };
 
+  const handleSaveBackmatterChapters = async (updatedChapters: Chapter[]) => {
+    setChapters(updatedChapters);
+    await saveChapters(updatedChapters);
+    setLastSavedAt(Date.now());
+  };
+
+  const handleReorderChapters = async (reorderedChapters: Chapter[]) => {
+    setChapters(reorderedChapters);
+    await saveChapters(reorderedChapters);
+    setLastSavedAt(Date.now());
+  };
+
   // Quick action from Roadmap Modal
   const handleRoadmapAction = (
-    action: 'part' | 'import' | 'footnotes' | 'docx' | 'goals' | 'cover-wrap' | 'preflight'
+    action: 'part' | 'import' | 'footnotes' | 'docx' | 'goals' | 'cover-wrap' | 'preflight' | 'backmatter'
   ) => {
     if (action === 'part') {
       handleAddPartDivider();
@@ -414,6 +435,8 @@ export function App() {
       setShowCoverWrapModal(true);
     } else if (action === 'preflight') {
       setShowPreflightModal(true);
+    } else if (action === 'backmatter') {
+      setShowBackmatterModal(true);
     }
   };
 
@@ -428,9 +451,10 @@ export function App() {
   }
 
   const selectedChapter = chapters.find((c) => c.id === selectedChapterId) || chapters[0];
+  const readingTimeMinutes = totalBookWords > 0 ? Math.ceil(totalBookWords / 200) : 0;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-stone-950 text-stone-100 overflow-hidden font-sans">
+    <div className="h-[100dvh] w-screen flex flex-col bg-stone-950 text-stone-100 overflow-hidden font-sans">
       {/* Top Application Header */}
       <Header
         book={book}
@@ -451,32 +475,92 @@ export function App() {
         onOpenWritingVelocity={() => setShowVelocityModal(true)}
         onOpenImportModal={() => handleOpenImport()}
         onOpenDocumentCleaner={() => setShowCleanerModal(true)}
+        onOpenBackmatterModal={() => setShowBackmatterModal(true)}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+        onOpenMobileTools={() => setIsMobileToolsOpen(true)}
       />
 
-      {/* Main 3-Column Workspace */}
+      {/* Main Responsive Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left: Manuscript Tree & Character Bible Sidebar (Hidden in Focus Mode) */}
+        {/* Desktop Left: Manuscript Tree & Character Bible Sidebar */}
         {!focusMode && (
-          <SidebarNav
-            book={book}
-            chapters={chapters}
-            selectedChapterId={selectedChapterId}
-            onSelectChapter={(id) => setSelectedChapterId(id)}
-            onAddChapter={handleAddChapter}
-            onAddPartDivider={handleAddPartDivider}
-            onDeleteChapter={handleDeleteChapter}
-            characters={characters}
-            onOpenCharacterModal={() => setShowCharacterModal(true)}
-            onImportManuscript={handleImportManuscript}
-            onUpdateBookGoals={handleUpdateBookGoals}
-            onUpdateChapterTarget={handleUpdateChapterTarget}
-            onOpenWritingVelocity={() => setShowVelocityModal(true)}
-            onOpenImportModal={(file) => handleOpenImport(file)}
-          />
+          <div className="hidden lg:flex h-full shrink-0">
+            <SidebarNav
+              book={book}
+              chapters={chapters}
+              selectedChapterId={selectedChapterId}
+              onSelectChapter={(id) => setSelectedChapterId(id)}
+              onAddChapter={handleAddChapter}
+              onAddPartDivider={handleAddPartDivider}
+              onDeleteChapter={handleDeleteChapter}
+              characters={characters}
+              onOpenCharacterModal={() => setShowCharacterModal(true)}
+              onImportManuscript={handleImportManuscript}
+              onUpdateBookGoals={handleUpdateBookGoals}
+              onUpdateChapterTarget={handleUpdateChapterTarget}
+              onOpenWritingVelocity={() => setShowVelocityModal(true)}
+              onOpenImportModal={(file) => handleOpenImport(file)}
+              onOpenBackmatterModal={() => setShowBackmatterModal(true)}
+              onReorderChapters={handleReorderChapters}
+            />
+          </div>
         )}
 
-        {/* Center: Writing & Prose Editor */}
-        <main className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Mobile Slide-Over Sidebar Drawer */}
+        {!focusMode && isMobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            {/* Drawer Content */}
+            <div className="relative w-4/5 max-w-xs h-full bg-stone-950 shadow-2xl flex flex-col z-10 animate-slide-right">
+              <SidebarNav
+                book={book}
+                chapters={chapters}
+                selectedChapterId={selectedChapterId}
+                onSelectChapter={(id) => {
+                  setSelectedChapterId(id);
+                  setIsMobileSidebarOpen(false);
+                  setMobileActiveTab('editor');
+                }}
+                onAddChapter={handleAddChapter}
+                onAddPartDivider={handleAddPartDivider}
+                onDeleteChapter={handleDeleteChapter}
+                characters={characters}
+                onOpenCharacterModal={() => {
+                  setIsMobileSidebarOpen(false);
+                  setShowCharacterModal(true);
+                }}
+                onImportManuscript={handleImportManuscript}
+                onUpdateBookGoals={handleUpdateBookGoals}
+                onUpdateChapterTarget={handleUpdateChapterTarget}
+                onOpenWritingVelocity={() => {
+                  setIsMobileSidebarOpen(false);
+                  setShowVelocityModal(true);
+                }}
+                onOpenImportModal={(file) => {
+                  setIsMobileSidebarOpen(false);
+                  handleOpenImport(file);
+                }}
+                onOpenBackmatterModal={() => {
+                  setIsMobileSidebarOpen(false);
+                  setShowBackmatterModal(true);
+                }}
+                onCloseMobile={() => setIsMobileSidebarOpen(false)}
+                onReorderChapters={handleReorderChapters}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Center: Writing & Prose Editor (Visible on desktop or when mobileActiveTab === 'editor') */}
+        <main
+          className={`flex-1 flex flex-col overflow-hidden relative ${
+            mobileActiveTab === 'preview' ? 'hidden lg:flex' : 'flex'
+          }`}
+        >
           {selectedChapter ? (
             <EditorPane
               chapter={selectedChapter}
@@ -495,11 +579,59 @@ export function App() {
           )}
         </main>
 
-        {/* Right: Real-time Device Preview Pane (Hidden in Focus Mode or when collapsed) */}
+        {/* Right: Real-time Device Preview Pane (Visible on desktop or when mobileActiveTab === 'preview') */}
         {!focusMode && showPreviewPane && selectedChapter && (
-          <PreviewPane book={book} chapter={selectedChapter} />
+          <div
+            className={`h-full ${
+              mobileActiveTab === 'preview'
+                ? 'flex flex-1 w-full pb-16 lg:pb-0'
+                : 'hidden lg:flex lg:w-[45%]'
+            }`}
+          >
+            <PreviewPane book={book} chapter={selectedChapter} />
+          </div>
         )}
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Hidden in Focus Mode or on desktop) */}
+      {!focusMode && (
+        <MobileBottomNav
+          activeTab={mobileActiveTab}
+          onTabChange={(tab) => {
+            if (tab === 'tools') {
+              setIsMobileToolsOpen(true);
+            } else if (tab === 'chapters') {
+              setIsMobileSidebarOpen(true);
+            } else {
+              setMobileActiveTab(tab);
+            }
+          }}
+          chapterCount={chapters.length}
+          wordCount={totalBookWords}
+          targetWordCount={book.targetWordCount || 60000}
+        />
+      )}
+
+      {/* Mobile Studio Tools Drawer */}
+      <MobileToolsDrawer
+        isOpen={isMobileToolsOpen}
+        onClose={() => setIsMobileToolsOpen(false)}
+        book={book}
+        totalWords={totalBookWords}
+        readingTimeMinutes={readingTimeMinutes}
+        onOpenBackmatterModal={() => setShowBackmatterModal(true)}
+        onOpenDocumentCleaner={() => setShowCleanerModal(true)}
+        onOpenWritingVelocity={() => setShowVelocityModal(true)}
+        onOpenPreflight={() => setShowPreflightModal(true)}
+        onOpenCoverWrap={() => setShowCoverWrapModal(true)}
+        onOpenCharacters={() => setShowCharacterModal(true)}
+        onOpenStyleModal={() => setShowStyleModal(true)}
+        onOpenBookDetails={() => setShowBookDetails(true)}
+        onOpenImportModal={() => handleOpenImport()}
+        onOpenExportModal={() => setShowExportModal(true)}
+        onOpenRoadmap={() => setShowRoadmapModal(true)}
+        onOpenShortcuts={() => setShowShortcutsModal(true)}
+      />
 
       {/* Modals & Dialogs */}
       <BookDetailsModal
@@ -584,6 +716,15 @@ export function App() {
         activeChapter={selectedChapter}
         chapters={chapters}
         onApplyCleaning={handleApplyCleaning}
+      />
+
+      <BackmatterManagerModal
+        isOpen={showBackmatterModal}
+        onClose={() => setShowBackmatterModal(false)}
+        book={book}
+        chapters={chapters}
+        onSaveChapters={handleSaveBackmatterChapters}
+        onSelectChapter={(id) => setSelectedChapterId(id)}
       />
     </div>
   );

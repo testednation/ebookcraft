@@ -11,7 +11,10 @@ export type SectionType =
   | 'epilogue'
   | 'afterword'
   | 'acknowledgments'
-  | 'about-author';
+  | 'about-author'
+  | 'newsletter'
+  | 'also-by'
+  | 'review-request';
 
 export type SectionGroup = 'front-matter' | 'body' | 'back-matter';
 
